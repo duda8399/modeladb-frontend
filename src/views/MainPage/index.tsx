@@ -41,7 +41,6 @@ const MainPage: React.FC = () => {
             style={{
               width: collapsed ? 60 : 200,
               height: collapsed ? 60 : 80,
-              transition: "all 0.2s ease",
               objectFit: "cover",
             }}
             alt="Logo"
