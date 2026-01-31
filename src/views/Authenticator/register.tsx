@@ -19,9 +19,7 @@ export default function RegisterPage() {
   const navigate = useNavigate();
 
   return (
-    <Layout
-      style={{ minHeight: "100vh", background: "#fff", overflow: "hidden" }}
-    >
+    <Layout style={{ background: "#fff", overflow: "hidden" }}>
       <Header
         style={{
           background: "#fff",
@@ -114,7 +112,7 @@ export default function RegisterPage() {
               </Form.Item>
             </Form>
 
-            <Button type="primary" size="large" block style={{ marginTop: 24 }}>
+            <Button type="primary" size="large" block style={{ marginTop: 10 }}>
               Criar conta
             </Button>
 

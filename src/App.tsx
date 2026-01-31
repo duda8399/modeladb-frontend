@@ -7,8 +7,23 @@ function App() {
     <ConfigProvider
       theme={{
         token: {
-          colorPrimary: "#2f9e41",
+          colorPrimary: "#2F7D32",
+          colorError: "#B11226", 
           fontFamily: "Inter, sans-serif",
+        },
+        components: {
+          Layout: {
+            siderBg: "#E6E7E3",
+            headerBg: "#F5F5F3",
+          },
+          Menu: {
+            darkItemBg: "#E6E7E3",
+            darkItemColor: "#2F7D32",
+            darkItemHoverBg: "#6FBF8E",
+            darkItemHoverColor: "#FFFFFF",
+            darkItemSelectedBg: "#2F7D32",
+            darkItemSelectedColor: "#FFFFFF",
+          },
         },
       }}
     >

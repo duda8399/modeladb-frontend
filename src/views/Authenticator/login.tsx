@@ -21,9 +21,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
 
   return (
-    <Layout
-      style={{ minHeight: "100vh", background: "#fff", overflow: "hidden" }}
-    >
+    <Layout style={{ background: "#fff", overflow: "hidden" }}>
       <Header
         style={{
           background: "#fff",
@@ -84,7 +82,7 @@ export default function LoginPage() {
               size="large"
               block
               style={{ marginTop: 24 }}
-              onClick={() => navigate("/")}
+              onClick={() => navigate("/dashboard")}
             >
               Login
             </Button>
