@@ -1,6 +1,8 @@
 import { BrowserRouter } from "react-router-dom";
 import { AppRoutes } from "./routes/AppRoutes";
 import { ConfigProvider } from "antd";
+import { ReactFlowProvider } from "@xyflow/react";
+import { DnDProvider } from "./views/Constructor/useDnD";
 
 function App() {
   return (
@@ -8,7 +10,7 @@ function App() {
       theme={{
         token: {
           colorPrimary: "#2F7D32",
-          colorError: "#B11226", 
+          colorError: "#B11226",
           fontFamily: "Inter, sans-serif",
         },
         components: {
@@ -27,9 +29,13 @@ function App() {
         },
       }}
     >
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
+      <ReactFlowProvider>
+        <DnDProvider>
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        </DnDProvider>
+      </ReactFlowProvider>
     </ConfigProvider>
   );
 }
