@@ -8,17 +8,54 @@ import {
   Card,
   Divider,
   Form,
+  message,
 } from "antd";
 import { GoogleOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import LogoImage from "../../assets/logo.png";
 import Background from "../../assets/fundo.png";
+import { api } from "../../services/api";
 
 const { Header, Content } = Layout;
 const { Title, Link } = Typography;
 
+type LoginFormData = {
+  email: string;
+  password: string;
+};
+
 export default function LoginPage() {
   const navigate = useNavigate();
+  const [loading] = message.useMessage();
+
+  async function handleLogin(data: LoginFormData) {
+    try {
+      loading.open({
+        type: "loading",
+        content: "Entrando...",
+      });
+
+      const response = await api.post("/auth/login", {
+        email: data.email,
+        password: data.password,
+      });
+
+      console.log("response", response);
+
+      const { accessToken } = response.data;
+
+      localStorage.setItem("accessToken", accessToken);
+
+      message.success("Login realizado com sucesso!");
+      navigate("/dashboard");
+    } catch (error: any) {
+      message.error(
+        error?.response?.data?.message || "E-mail ou senha inválidos",
+      );
+    } finally {
+      loading.destroy();
+    }
+  }
 
   return (
     <Layout style={{ background: "#fff", overflow: "hidden" }}>
@@ -34,10 +71,7 @@ export default function LoginPage() {
       >
         <div
           onClick={() => navigate("/")}
-          style={{
-            height: 100,
-            cursor: "pointer",
-          }}
+          style={{ height: 100, cursor: "pointer" }}
         >
           <img
             src={LogoImage}
@@ -63,29 +97,40 @@ export default function LoginPage() {
               Faça login e comece a modelar seu banco de dados
             </Title>
 
-            <Form layout="vertical">
-              <Form.Item label="Endereço de e-mail" name="login">
+            <Form layout="vertical" onFinish={handleLogin}>
+              <Form.Item
+                label="Endereço de e-mail"
+                name="email"
+                rules={[
+                  { required: true, message: "Informe seu e-mail" },
+                  { type: "email", message: "E-mail inválido" },
+                ]}
+              >
                 <Input size="large" placeholder="Endereço de e-mail" />
               </Form.Item>
 
-              <Form.Item label="Senha" name="password">
+              <Form.Item
+                label="Senha"
+                name="password"
+                rules={[{ required: true, message: "Informe sua senha" }]}
+              >
                 <Input.Password size="large" placeholder="Senha" />
               </Form.Item>
+
+              <Row justify="end">
+                <Link>Esqueceu sua senha?</Link>
+              </Row>
+
+              <Button
+                type="primary"
+                size="large"
+                block
+                htmlType="submit"
+                style={{ marginTop: 24 }}
+              >
+                Login
+              </Button>
             </Form>
-
-            <Row justify="end" align="middle">
-              <Link>Esqueceu sua senha?</Link>
-            </Row>
-
-            <Button
-              type="primary"
-              size="large"
-              block
-              style={{ marginTop: 24 }}
-              onClick={() => navigate("/dashboard")}
-            >
-              Login
-            </Button>
 
             <Divider>ou</Divider>
 

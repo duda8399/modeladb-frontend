@@ -7,16 +7,35 @@ import {
   Button,
   Divider,
   Form,
+  message,
 } from "antd";
 import { GoogleOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import LogoImage from "../../assets/logo.png";
+import { register } from "../../services/auth.service";
+import { useState } from "react";
 
 const { Header, Content } = Layout;
 const { Title, Link, Text } = Typography;
 
 export default function RegisterPage() {
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+
+  async function onSubmit(values: any) {
+    try {
+      setLoading(true);
+
+      await register(values);
+
+      message.success("Conta criada com sucesso!");
+      navigate("/");
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || "Erro ao criar conta");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <Layout style={{ background: "#fff", overflow: "hidden" }}>
@@ -51,10 +70,8 @@ export default function RegisterPage() {
         </Button>
       </Header>
 
-      {/* CONTENT */}
       <Content style={{ padding: "48px 32px" }}>
         <Row gutter={64} justify="center">
-          {/* FORM */}
           <Col
             xs={24}
             md={12}
@@ -80,7 +97,7 @@ export default function RegisterPage() {
               Comece agora a modelar seus bancos de dados
             </Text>
 
-            <Form layout="vertical">
+            <Form layout="vertical" onFinish={onSubmit}>
               <Form.Item
                 label="Nome"
                 name="name"
@@ -110,11 +127,18 @@ export default function RegisterPage() {
               >
                 <Input.Password size="large" placeholder="Crie uma senha" />
               </Form.Item>
-            </Form>
 
-            <Button type="primary" size="large" block style={{ marginTop: 10 }}>
-              Criar conta
-            </Button>
+              <Button
+                type="primary"
+                size="large"
+                block
+                htmlType="submit"
+                loading={loading}
+                style={{ marginTop: 10 }}
+              >
+                Criar conta
+              </Button>
+            </Form>
 
             <Divider>ou</Divider>
 
@@ -123,11 +147,7 @@ export default function RegisterPage() {
             </Button>
 
             <Text
-              style={{
-                display: "block",
-                textAlign: "center",
-                marginTop: 24,
-              }}
+              style={{ display: "block", textAlign: "center", marginTop: 24 }}
             >
               Já possui uma conta?{" "}
               <Link onClick={() => navigate("/")}>Faça login</Link>
