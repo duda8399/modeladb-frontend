@@ -10,14 +10,12 @@ import {
   Form,
   message,
 } from "antd";
-import { GoogleOutlined } from "@ant-design/icons";
+import { GoogleOutlined, LockOutlined, MailOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
-import LogoImage from "../../assets/logo.png";
 import Background from "../../assets/fundo.png";
 import { api } from "../../services/api";
 
-const { Header, Content } = Layout;
-const { Title, Link } = Typography;
+const { Title, Text, Link } = Typography;
 
 type LoginFormData = {
   email: string;
@@ -26,6 +24,7 @@ type LoginFormData = {
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const [messageApi, contextHolder] = message.useMessage();
   const [loading] = message.useMessage();
 
   async function handleLogin(data: LoginFormData) {
@@ -35,21 +34,13 @@ export default function LoginPage() {
         content: "Entrando...",
       });
 
-      const response = await api.post("/auth/login", {
-        email: data.email,
-        password: data.password,
-      });
-
-      console.log("response", response);
-
+      const response = await api.post("/auth/login", data);
       const { accessToken } = response.data;
 
       localStorage.setItem("accessToken", accessToken);
-
-      message.success("Login realizado com sucesso!");
-      navigate("/dashboard");
+      navigate("/");
     } catch (error: any) {
-      message.error(
+      messageApi.error(
         error?.response?.data?.message || "E-mail ou senha inválidos",
       );
     } finally {
@@ -58,103 +49,151 @@ export default function LoginPage() {
   }
 
   return (
-    <Layout style={{ background: "#fff", overflow: "hidden" }}>
-      <Header
-        style={{
-          background: "#fff",
-          borderBottom: "1px solid #f0f0f0",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          padding: "0 32px",
-        }}
-      >
-        <div
-          onClick={() => navigate("/")}
-          style={{ height: 100, cursor: "pointer" }}
+    <Layout style={{ height: "100vh" }}>
+      {contextHolder}
+      <Row style={{ height: "100vh" }}>
+        <Col
+          xs={0}
+          md={12}
+          style={{
+            height: "100vh",
+            padding: "50px 0 50px 50px",
+            boxSizing: "border-box",
+          }}
         >
           <img
-            src={LogoImage}
-            alt="Entrar"
+            src={Background}
+            alt="Ilustração ModelaDB"
             style={{
-              width: 200,
-              height: 100,
-              objectFit: "cover",
-              borderRadius: 8,
+              width: "100%",
+              maxWidth: "100%",
+              maxHeight: "100%",
+              borderRadius: "12px 0 0 12px",
             }}
           />
-        </div>
+        </Col>
 
-        <Button type="primary" onClick={() => navigate("/register")}>
-          Criar conta
-        </Button>
-      </Header>
-
-      <Content style={{ padding: "48px 32px" }}>
-        <Row gutter={64} justify="center">
-          <Col xs={24} md={12} lg={10}>
-            <Title level={1} style={{ textAlign: "center" }}>
-              Faça login e comece a modelar seu banco de dados
+        <Col
+          xs={24}
+          md={12}
+          style={{
+            padding: "50px 50px 50px 0",
+            background: "#f6f9f7",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            boxSizing: "border-box",
+          }}
+        >
+          <Card
+            style={{
+              width: "100%",
+              minHeight: "100%",
+              borderRadius: "0 12px 12px 0",
+              padding: "40px 40px",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+            }}
+          >
+            <Title level={3} style={{ textAlign: "center" }}>
+              Bem-vindo(a)
             </Title>
+
+            <Text
+              type="secondary"
+              style={{
+                display: "block",
+                textAlign: "center",
+                marginBottom: 32,
+              }}
+            >
+              Faça o login para acessar os recursos do ModelaDB
+            </Text>
 
             <Form layout="vertical" onFinish={handleLogin}>
               <Form.Item
-                label="Endereço de e-mail"
                 name="email"
                 rules={[
                   { required: true, message: "Informe seu e-mail" },
                   { type: "email", message: "E-mail inválido" },
                 ]}
               >
-                <Input size="large" placeholder="Endereço de e-mail" />
+                <Input
+                  size="large"
+                  placeholder="Endereço de e-mail"
+                  prefix={
+                    <MailOutlined
+                      style={{
+                        color: "#bfbfbf",
+                        paddingRight: "5px",
+                        fontSize: "18px",
+                      }}
+                    />
+                  }
+                />
               </Form.Item>
 
               <Form.Item
-                label="Senha"
                 name="password"
                 rules={[{ required: true, message: "Informe sua senha" }]}
               >
-                <Input.Password size="large" placeholder="Senha" />
+                <Input.Password
+                  size="large"
+                  placeholder="Senha"
+                  prefix={
+                    <LockOutlined
+                      style={{
+                        color: "#bfbfbf",
+                        paddingRight: "5px",
+                        fontSize: "18px",
+                      }}
+                    />
+                  }
+                />
               </Form.Item>
 
-              <Row justify="end">
-                <Link>Esqueceu sua senha?</Link>
+              <Row justify="end" style={{ marginBottom: 16 }}>
+                <Link>Esqueceu a senha?</Link>
               </Row>
 
               <Button
                 type="primary"
+                htmlType="submit"
                 size="large"
                 block
-                htmlType="submit"
-                style={{ marginTop: 24 }}
+                style={{
+                  height: 48,
+                  fontSize: 16,
+                  borderRadius: 8,
+                }}
               >
-                Login
+                Entrar
               </Button>
             </Form>
 
             <Divider>ou</Divider>
 
-            <Button block icon={<GoogleOutlined />} size="large">
-              Faça login com Google
+            <Button
+              block
+              size="large"
+              icon={<GoogleOutlined />}
+              style={{ height: 48, borderRadius: 8 }}
+            >
+              Entrar com Google
             </Button>
-          </Col>
 
-          <Col xs={0} md={12} lg={10}>
-            <Card
+            <Text
               style={{
-                backgroundColor: "#2f9e41",
-                color: "#fff",
+                display: "block",
+                textAlign: "center",
+                marginTop: 24,
               }}
             >
-              <img
-                src={Background}
-                alt="Ilustração"
-                style={{ width: "100%" }}
-              />
-            </Card>
-          </Col>
-        </Row>
-      </Content>
+              Não tem uma conta?{" "}
+              <Link onClick={() => navigate("/register")}>Criar conta</Link>
+            </Text>
+          </Card>
+        </Col>
+      </Row>
     </Layout>
   );
 }

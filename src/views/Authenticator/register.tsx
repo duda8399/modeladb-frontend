@@ -8,81 +8,81 @@ import {
   Divider,
   Form,
   message,
+  Card,
 } from "antd";
 import { GoogleOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
-import LogoImage from "../../assets/logo.png";
 import { register } from "../../services/auth.service";
 import { useState } from "react";
-
-const { Header, Content } = Layout;
+import Background from "../../assets/fundo.png";
 const { Title, Link, Text } = Typography;
 
 export default function RegisterPage() {
   const navigate = useNavigate();
+  const [messageApi, contextHolder] = message.useMessage();
   const [loading, setLoading] = useState(false);
 
   async function onSubmit(values: any) {
     try {
       setLoading(true);
-
       await register(values);
-
-      message.success("Conta criada com sucesso!");
-      navigate("/");
+      messageApi.success("Conta criada com sucesso!");
+      //navigate("/login");
     } catch (error: any) {
-      message.error(error?.response?.data?.message || "Erro ao criar conta");
+      messageApi.error(error?.response?.data?.message || "Erro ao criar conta");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <Layout style={{ background: "#fff", overflow: "hidden" }}>
-      <Header
-        style={{
-          background: "#fff",
-          borderBottom: "1px solid #f0f0f0",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          padding: "0 32px",
-        }}
-      >
-        <div
-          onClick={() => navigate("/")}
-          style={{ height: 100, cursor: "pointer" }}
+
+    <Layout style={{ height: "100vh" }}>
+      {contextHolder}
+      <Row style={{ height: "100vh" }}>
+        <Col
+          xs={0}
+          md={12}
+          style={{
+            height: "100vh",
+            padding: "50px 0 50px 50px",
+            boxSizing: "border-box",
+          }}
         >
           <img
-            src={LogoImage}
-            alt="ModelaDB"
+            src={Background}
+            alt="Ilustração ModelaDB"
             style={{
-              width: 200,
-              height: 100,
-              objectFit: "cover",
-              borderRadius: 8,
+              width: "100%",
+              maxWidth: "100%",
+              maxHeight: "100%",
+              borderRadius: "12px 0 0 12px",
             }}
           />
-        </div>
+        </Col>
 
-        <Button type="primary" onClick={() => navigate("/")}>
-          Já tenho conta
-        </Button>
-      </Header>
-
-      <Content style={{ padding: "48px 32px" }}>
-        <Row gutter={64} justify="center">
-          <Col
-            xs={24}
-            md={12}
-            lg={10}
+        <Col
+          xs={24}
+          md={12}
+          style={{
+            padding: "50px 50px 50px 0",
+            background: "#f6f9f7",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            boxSizing: "border-box",
+          }}
+        >
+          <Card
             style={{
-              backgroundColor: "#f0efef",
-              borderRadius: 10,
-              padding: 30,
+              width: "100%",
+              minHeight: "100%",
+              borderRadius: "0 12px 12px 0",
+              padding: "20px 20px",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
             }}
           >
-            <Title level={1} style={{ textAlign: "center" }}>
+            <Title level={3} style={{ textAlign: "center" }}>
               Crie sua conta no ModelaDB
             </Title>
 
@@ -91,10 +91,10 @@ export default function RegisterPage() {
               style={{
                 display: "block",
                 textAlign: "center",
-                marginBottom: 32,
+                paddingBottom: 10,
               }}
             >
-              Comece agora a modelar seus bancos de dados
+              Comece agora a modelar seu banco de dados
             </Text>
 
             <Form layout="vertical" onFinish={onSubmit}>
@@ -128,13 +128,34 @@ export default function RegisterPage() {
                 <Input.Password size="large" placeholder="Crie uma senha" />
               </Form.Item>
 
+              <Form.Item
+                label="Confirmar senha"
+                name="confirmPassword"
+                dependencies={["password"]}
+                hasFeedback
+                rules={[
+                  { required: true, message: "Confirme sua senha" },
+                  ({ getFieldValue }) => ({
+                    validator(_, value) {
+                      if (!value || getFieldValue("password") === value) {
+                        return Promise.resolve();
+                      }
+                      return Promise.reject(
+                        new Error("As senhas não coincidem"),
+                      );
+                    },
+                  }),
+                ]}
+              >
+                <Input.Password size="large" placeholder="Confirme sua senha" />
+              </Form.Item>
+
               <Button
                 type="primary"
                 size="large"
                 block
                 htmlType="submit"
                 loading={loading}
-                style={{ marginTop: 10 }}
               >
                 Criar conta
               </Button>
@@ -147,14 +168,15 @@ export default function RegisterPage() {
             </Button>
 
             <Text
-              style={{ display: "block", textAlign: "center", marginTop: 24 }}
+              style={{ display: "block", textAlign: "center", paddingTop: 24 }}
             >
               Já possui uma conta?{" "}
               <Link onClick={() => navigate("/")}>Faça login</Link>
             </Text>
-          </Col>
-        </Row>
-      </Content>
+
+          </Card>
+        </Col>
+      </Row>
     </Layout>
   );
 }
