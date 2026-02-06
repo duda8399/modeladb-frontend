@@ -10,7 +10,7 @@ import {
   Form,
   message,
 } from "antd";
-import { GoogleOutlined, LockOutlined, MailOutlined } from "@ant-design/icons";
+import { LockOutlined, MailOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import Background from "../../assets/fundo.png";
 import { api } from "../../services/api";
@@ -40,9 +40,14 @@ export default function LoginPage() {
       localStorage.setItem("accessToken", accessToken);
       navigate("/");
     } catch (error: any) {
-      messageApi.error(
-        error?.response?.data?.message || "E-mail ou senha inválidos",
-      );
+      const errorMessage = error?.response?.data?.message;
+
+      const messageText =
+        !errorMessage || errorMessage === "Unauthorized"
+          ? "E-mail ou senha inválidos"
+          : errorMessage;
+
+      messageApi.error(messageText);
     } finally {
       loading.destroy();
     }
@@ -56,7 +61,7 @@ export default function LoginPage() {
           xs={0}
           md={12}
           style={{
-            height: "100vh",
+            height: "100%",
             padding: "50px 0 50px 50px",
             boxSizing: "border-box",
           }}
@@ -66,8 +71,7 @@ export default function LoginPage() {
             alt="Ilustração ModelaDB"
             style={{
               width: "100%",
-              maxWidth: "100%",
-              maxHeight: "100%",
+              height: "100%",
               borderRadius: "12px 0 0 12px",
             }}
           />
@@ -90,7 +94,7 @@ export default function LoginPage() {
               width: "100%",
               minHeight: "100%",
               borderRadius: "0 12px 12px 0",
-              padding: "40px 40px",
+              padding: "80px 40px",
               boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
             }}
           >
@@ -170,16 +174,7 @@ export default function LoginPage() {
               </Button>
             </Form>
 
-            <Divider>ou</Divider>
-
-            <Button
-              block
-              size="large"
-              icon={<GoogleOutlined />}
-              style={{ height: 48, borderRadius: 8 }}
-            >
-              Entrar com Google
-            </Button>
+            <Divider />
 
             <Text
               style={{

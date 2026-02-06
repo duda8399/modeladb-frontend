@@ -10,7 +10,6 @@ import {
   message,
   Card,
 } from "antd";
-import { GoogleOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { register } from "../../services/auth.service";
 import { useState } from "react";
@@ -27,7 +26,7 @@ export default function RegisterPage() {
       setLoading(true);
       await register(values);
       messageApi.success("Conta criada com sucesso!");
-      //navigate("/login");
+      navigate("/login");
     } catch (error: any) {
       messageApi.error(error?.response?.data?.message || "Erro ao criar conta");
     } finally {
@@ -36,7 +35,6 @@ export default function RegisterPage() {
   }
 
   return (
-
     <Layout style={{ height: "100vh" }}>
       {contextHolder}
       <Row style={{ height: "100vh" }}>
@@ -44,7 +42,7 @@ export default function RegisterPage() {
           xs={0}
           md={12}
           style={{
-            height: "100vh",
+            height: "100%",
             padding: "50px 0 50px 50px",
             boxSizing: "border-box",
           }}
@@ -54,8 +52,7 @@ export default function RegisterPage() {
             alt="Ilustração ModelaDB"
             style={{
               width: "100%",
-              maxWidth: "100%",
-              maxHeight: "100%",
+              height: "100%",
               borderRadius: "12px 0 0 12px",
             }}
           />
@@ -78,7 +75,7 @@ export default function RegisterPage() {
               width: "100%",
               minHeight: "100%",
               borderRadius: "0 12px 12px 0",
-              padding: "20px 20px",
+              padding: "0 40px",
               boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
             }}
           >
@@ -161,19 +158,14 @@ export default function RegisterPage() {
               </Button>
             </Form>
 
-            <Divider>ou</Divider>
-
-            <Button block icon={<GoogleOutlined />} size="large">
-              Criar conta com Google
-            </Button>
+            <Divider />
 
             <Text
-              style={{ display: "block", textAlign: "center", paddingTop: 24 }}
+              style={{ display: "block", textAlign: "center", paddingTop: 10 }}
             >
               Já possui uma conta?{" "}
               <Link onClick={() => navigate("/")}>Faça login</Link>
             </Text>
-
           </Card>
         </Col>
       </Row>
