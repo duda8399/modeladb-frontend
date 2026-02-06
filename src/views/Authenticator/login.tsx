@@ -154,7 +154,7 @@ export default function LoginPage() {
               </Form.Item>
 
               <Row justify="end" style={{ marginBottom: 16 }}>
-                <Link onClick={() => navigate("/reset-password")}>
+                <Link onClick={() => navigate("/forgot-password")}>
                   Esqueceu a senha?
                 </Link>
               </Row>

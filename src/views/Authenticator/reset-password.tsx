@@ -9,7 +9,6 @@ import {
   Form,
   message,
 } from "antd";
-import { MailOutlined } from "@ant-design/icons";
 import Background from "../../assets/fundo.png";
 import { api } from "../../services/api";
 import Link from "antd/es/typography/Link";
@@ -20,24 +19,36 @@ const { Title, Text } = Typography;
 
 export default function ResetPasswordPage() {
   const navigate = useNavigate();
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("token");
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
 
-  async function handleResetPassword(values: { email: string }) {
+  async function handleResetPassword(values: { password: string }) {
     try {
       setLoading(true);
 
-      await api.post("/auth/forgot-password", {email: values.email});
-      messageApi.success("E-mail de recuperação de senha enviado.");
+      await api.post(
+        "/auth/reset-password",
+        { password: values.password },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+      messageApi.success("Senha redefinida com sucesso.");
 
-      form.resetFields();
+      setTimeout(() => {
+        navigate("/login");
+      }, 1500);
     } catch (error: any) {
       const errorMessage = error?.response?.data?.message;
 
       const messageText =
         !errorMessage || errorMessage === "Unauthorized"
-          ? "E-mail inválido"
+          ? "Erro ao redefinir senha."
           : errorMessage;
 
       messageApi.error(messageText);
@@ -92,30 +103,44 @@ export default function ResetPasswordPage() {
             }}
           >
             <Title level={3} style={{ textAlign: "center", paddingBottom: 15 }}>
-              Recuperar senha
+              Redefinir senha
             </Title>
 
             <Form layout="vertical" form={form} onFinish={handleResetPassword}>
               <Form.Item
-                name="email"
+                label="Nova senha"
+                name="password"
                 rules={[
-                  { required: true, message: "Informe seu e-mail" },
-                  { type: "email", message: "E-mail inválido" },
+                  { required: true, message: "Crie uma nova senha" },
+                  { min: 6, message: "Mínimo de 6 caracteres" },
                 ]}
               >
-                <Input
+                <Input.Password
                   size="large"
-                  placeholder="Endereço de e-mail"
-                  prefix={
-                    <MailOutlined
-                      style={{
-                        color: "#bfbfbf",
-                        paddingRight: "5px",
-                        fontSize: "18px",
-                      }}
-                    />
-                  }
+                  placeholder="Crie uma nova senha"
                 />
+              </Form.Item>
+
+              <Form.Item
+                label="Confirmar senha"
+                name="confirmPassword"
+                dependencies={["password"]}
+                hasFeedback
+                rules={[
+                  { required: true, message: "Confirme sua senha" },
+                  ({ getFieldValue }) => ({
+                    validator(_, value) {
+                      if (!value || getFieldValue("password") === value) {
+                        return Promise.resolve();
+                      }
+                      return Promise.reject(
+                        new Error("As senhas não coincidem"),
+                      );
+                    },
+                  }),
+                ]}
+              >
+                <Input.Password size="large" placeholder="Confirme sua senha" />
               </Form.Item>
 
               <Button

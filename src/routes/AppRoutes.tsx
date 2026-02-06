@@ -6,6 +6,7 @@ import LoginPage from "../views/Authenticator/login";
 import RegisterPage from "../views/Authenticator/register";
 import { PrivateRoute } from "../views/Authenticator/private-route";
 import { PublicRoute } from "../views/Authenticator/public-route";
+import ForgotPasswordPage from "../views/Authenticator/forgot-password";
 import ResetPasswordPage from "../views/Authenticator/reset-password";
 
 export function AppRoutes() {
@@ -25,6 +26,15 @@ export function AppRoutes() {
         element={
           <PublicRoute>
             <RegisterPage />
+          </PublicRoute>
+        }
+      />
+
+      <Route
+        path="/forgot-password"
+        element={
+          <PublicRoute>
+            <ForgotPasswordPage />
           </PublicRoute>
         }
       />
