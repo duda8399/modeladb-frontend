@@ -14,6 +14,7 @@ import { LockOutlined, MailOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import Background from "../../assets/fundo.png";
 import { api } from "../../services/api";
+import { useState } from "react";
 
 const { Title, Text, Link } = Typography;
 
@@ -24,15 +25,12 @@ type LoginFormData = {
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
-  const [loading] = message.useMessage();
 
   async function handleLogin(data: LoginFormData) {
     try {
-      loading.open({
-        type: "loading",
-        content: "Entrando...",
-      });
+      setLoading(true);
 
       const response = await api.post("/auth/login", data);
       const { accessToken } = response.data;
@@ -49,7 +47,7 @@ export default function LoginPage() {
 
       messageApi.error(messageText);
     } finally {
-      loading.destroy();
+      setLoading(false);
     }
   }
 
@@ -156,7 +154,9 @@ export default function LoginPage() {
               </Form.Item>
 
               <Row justify="end" style={{ marginBottom: 16 }}>
-                <Link>Esqueceu a senha?</Link>
+                <Link onClick={() => navigate("/reset-password")}>
+                  Esqueceu a senha?
+                </Link>
               </Row>
 
               <Button
@@ -169,6 +169,7 @@ export default function LoginPage() {
                   fontSize: 16,
                   borderRadius: 8,
                 }}
+                loading={loading}
               >
                 Entrar
               </Button>

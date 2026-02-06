@@ -24,9 +24,13 @@ export default function RegisterPage() {
   async function onSubmit(values: any) {
     try {
       setLoading(true);
+
       await register(values);
       messageApi.success("Conta criada com sucesso!");
-      navigate("/login");
+
+      setTimeout(() => {
+        navigate("/login");
+      }, 1500);
     } catch (error: any) {
       messageApi.error(error?.response?.data?.message || "Erro ao criar conta");
     } finally {
