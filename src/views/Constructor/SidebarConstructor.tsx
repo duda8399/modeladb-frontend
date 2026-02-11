@@ -7,7 +7,7 @@ import { useDnD, useDnDPosition, type OnDropAction } from "./useDnD";
 let id = 0;
 const getId = () => `dndnode_${id++}`;
 
-export function Sidebar() {
+export function SidebarConstructor() {
   const { onDragStart, isDragging } = useDnD();
   // The type of the node that is being dragged.
   const [type, setType] = useState<string | null>(null);
