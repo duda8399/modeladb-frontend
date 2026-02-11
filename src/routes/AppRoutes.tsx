@@ -8,6 +8,7 @@ import { PrivateRoute } from "../views/Authenticator/private-route";
 import { PublicRoute } from "../views/Authenticator/public-route";
 import ForgotPasswordPage from "../views/Authenticator/forgot-password";
 import ResetPasswordPage from "../views/Authenticator/reset-password";
+import ProfilePage from "../views/MainPage/profile";
 
 export function AppRoutes() {
   return (
@@ -53,6 +54,15 @@ export function AppRoutes() {
         element={
           <PrivateRoute>
             <MainPage />
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/profile"
+        element={
+          <PrivateRoute>
+            <ProfilePage />
           </PrivateRoute>
         }
       />

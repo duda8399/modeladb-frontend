@@ -74,6 +74,7 @@ export function HeaderBar({ collapsed, setCollapsed }: HeaderBarProps) {
         menu={{ items: profileMenuItems, onClick: handleMenuClick }}
         trigger={["click"]}
         placement="bottomRight"
+        overlayStyle={{ width: 200 }} 
       >
         <Button
           type="text"
