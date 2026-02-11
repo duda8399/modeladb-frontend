@@ -3,9 +3,9 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  SettingOutlined,
   UserOutlined,
 } from "@ant-design/icons";
+import { useNavigate } from "react-router-dom";
 
 const { Header } = Layout;
 
@@ -21,11 +21,6 @@ const profileMenuItems: MenuProps["items"] = [
     label: "Meu perfil",
   },
   {
-    key: "settings",
-    icon: <SettingOutlined />,
-    label: "Configurações",
-  },
-  {
     type: "divider",
   },
   {
@@ -37,9 +32,21 @@ const profileMenuItems: MenuProps["items"] = [
 ];
 
 export function HeaderBar({ collapsed, setCollapsed }: HeaderBarProps) {
+  const navigate = useNavigate();
   const {
     token: { colorPrimary },
   } = theme.useToken();
+
+  const handleMenuClick: MenuProps["onClick"] = ({ key }) => {
+    if (key === "logout") {
+      localStorage.removeItem("accessToken");
+      navigate("/login");
+    }
+
+    if (key === "profile") {
+      navigate("/profile");
+    }
+  };
 
   return (
     <Header
@@ -64,7 +71,7 @@ export function HeaderBar({ collapsed, setCollapsed }: HeaderBarProps) {
       />
 
       <Dropdown
-        menu={{ items: profileMenuItems }}
+        menu={{ items: profileMenuItems, onClick: handleMenuClick }}
         trigger={["click"]}
         placement="bottomRight"
       >
