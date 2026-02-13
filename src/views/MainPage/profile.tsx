@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Avatar,
   Button,
@@ -13,12 +13,35 @@ import {
 } from "antd";
 import { UserOutlined, UploadOutlined } from "@ant-design/icons";
 import { AppLayout } from "../../components/LayoutComponents/AppLayout";
+import { api } from "../../services/api";
 
 const { Title, Text } = Typography;
 
 const ProfilePage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
+  const [form] = Form.useForm();
+
+  useEffect(() => {
+    const id = localStorage.getItem("userId");
+    if (id) loadUser(id);
+  }, []);
+
+  async function loadUser(id: string) {
+    try {
+      setLoading(true);
+
+      const { data } = await api.get(`/user/${id}`);
+
+      form.setFieldsValue({
+        name: data.name,
+      });
+    } catch (error) {
+      messageApi.error("Erro ao carregar usuário");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function onFinish(values: any) {
     try {
@@ -39,9 +62,7 @@ const ProfilePage: React.FC = () => {
       {contextHolder}
 
       <Title level={3}>Meu perfil</Title>
-      <Text type="secondary">
-        Atualize suas informações pessoais e senha
-      </Text>
+      <Text type="secondary">Atualize suas informações pessoais e senha</Text>
 
       <Divider />
 
@@ -64,7 +85,7 @@ const ProfilePage: React.FC = () => {
         </Col>
 
         <Col xs={24} md={16}>
-          <Form layout="vertical" onFinish={onFinish}>
+          <Form form={form} layout="vertical" onFinish={onFinish}>
             <Form.Item
               label="Nome"
               name="name"
@@ -80,14 +101,9 @@ const ProfilePage: React.FC = () => {
             <Form.Item
               label="Nova senha"
               name="password"
-              rules={[
-                { min: 6, message: "Mínimo de 6 caracteres" },
-              ]}
+              rules={[{ min: 6, message: "Mínimo de 6 caracteres" }]}
             >
-              <Input.Password
-                size="large"
-                placeholder="Digite a nova senha"
-              />
+              <Input.Password size="large" placeholder="Digite a nova senha" />
             </Form.Item>
 
             <Form.Item
@@ -101,9 +117,7 @@ const ProfilePage: React.FC = () => {
                     if (!value || getFieldValue("password") === value) {
                       return Promise.resolve();
                     }
-                    return Promise.reject(
-                      new Error("As senhas não coincidem")
-                    );
+                    return Promise.reject(new Error("As senhas não coincidem"));
                   },
                 }),
               ]}

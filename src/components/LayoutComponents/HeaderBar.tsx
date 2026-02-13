@@ -39,6 +39,7 @@ export function HeaderBar({ collapsed, setCollapsed }: HeaderBarProps) {
 
   const handleMenuClick: MenuProps["onClick"] = ({ key }) => {
     if (key === "logout") {
+      localStorage.removeItem("userId");
       localStorage.removeItem("accessToken");
       navigate("/login");
     }

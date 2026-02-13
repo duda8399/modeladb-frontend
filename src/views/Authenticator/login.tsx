@@ -23,9 +23,10 @@ export default function LoginPage() {
       setLoading(true);
 
       const response = await api.post("/auth/login", data);
-      const { accessToken } = response.data;
+      const { userId, accessToken } = response.data;
 
       localStorage.setItem("accessToken", accessToken);
+      localStorage.setItem("userId", userId);
       navigate("/");
     } catch (error: any) {
       const errorMessage = error?.response?.data?.message;
