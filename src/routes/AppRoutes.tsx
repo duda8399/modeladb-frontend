@@ -68,7 +68,7 @@ export function AppRoutes() {
       />
 
       <Route
-        path="/model"
+        path="/model/:id"
         element={
           <PrivateRoute>
             <ConstructorPage />

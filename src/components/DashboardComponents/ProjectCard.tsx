@@ -1,34 +1,39 @@
-import { Card } from 'antd';
+import { Card, theme, Typography } from "antd";
+
+const { Text } = Typography;
 
 interface ProjectCardProps {
-    title: string;
-    description?: string;
-    onClick?: () => void;
+  title: string;
+  description?: string;
+  icon?: React.ReactNode;
+  onClick?: () => void;
 }
 
-export function ProjectCard({ title, description, onClick }: ProjectCardProps) {
-    return (
-        <Card
-            hoverable
-            style={{ width: 220 }}
-            cover={
-                <div
-                    style={{
-                        height: 120,
-                        color: '#fff',
-                        background: '#2f9e41',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 500,
-                    }}
-                >
-                    {title}
-                </div>
-            }
-            onClick={onClick}
-        >
-            <Card.Meta description={description} />
-        </Card>
-    );
+export function ProjectCard({
+  title,
+  description,
+  icon,
+  onClick,
+}: ProjectCardProps) {
+    const {
+    token: { colorPrimary },
+  } = theme.useToken();
+
+  return (
+    <Card
+      hoverable
+      onClick={onClick}
+      style={{
+        width: 350,
+        borderRadius: 12,
+        background: '#F5F5F3'
+      }}
+    >
+      <div style={{ fontSize: 28, color: colorPrimary }}>{icon}</div>
+
+      <div style={{ marginTop: 16, fontWeight: 600, color: colorPrimary }}>{title}</div>
+
+      <Text type="secondary">{description}</Text>
+    </Card>
+  );
 }
