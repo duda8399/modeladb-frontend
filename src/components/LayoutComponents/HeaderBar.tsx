@@ -1,4 +1,4 @@
-import { Layout, type MenuProps, Button, Dropdown, theme } from "antd";
+import { Layout, type MenuProps, Button, Dropdown, theme, Avatar } from "antd";
 import {
   LogoutOutlined,
   MenuFoldOutlined,
@@ -33,6 +33,7 @@ const profileMenuItems: MenuProps["items"] = [
 
 export function HeaderBar({ collapsed, setCollapsed }: HeaderBarProps) {
   const navigate = useNavigate();
+  const avatarUrl = localStorage.getItem("avatar") || undefined;
   const {
     token: { colorPrimary },
   } = theme.useToken();
@@ -75,13 +76,15 @@ export function HeaderBar({ collapsed, setCollapsed }: HeaderBarProps) {
         menu={{ items: profileMenuItems, onClick: handleMenuClick }}
         trigger={["click"]}
         placement="bottomRight"
-        overlayStyle={{ width: 200 }} 
+        overlayStyle={{ width: 200 }}
       >
-        <Button
-          type="text"
-          icon={<UserOutlined />}
-          style={{ color: "#fff", fontSize: 18 }}
-        />
+        <Button type="text" style={{ color: "#fff" }}>
+          <Avatar
+            size={36}
+            src={avatarUrl}
+            icon={!avatarUrl && <UserOutlined />}
+          />
+        </Button>
       </Dropdown>
     </Header>
   );

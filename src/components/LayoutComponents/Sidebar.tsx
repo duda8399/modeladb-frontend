@@ -13,6 +13,12 @@ const { Sider } = Layout;
 export function Sidebar({ collapsed }: { collapsed: boolean }) {
   const navigate = useNavigate();
 
+  const routes: Record<string, string> = {
+    "1": "/",
+    "2": "/documents",
+    "3": "/shared",
+  };
+
   return (
     <Sider
       trigger={null}
@@ -47,6 +53,7 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
         theme="dark"
         mode="inline"
         defaultSelectedKeys={["1"]}
+        onClick={({ key }) => navigate(routes[key])}
         items={[
           {
             key: "1",

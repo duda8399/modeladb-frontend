@@ -18,6 +18,8 @@ import { api } from "../../services/api";
 const { Title, Text } = Typography;
 
 const ProfilePage: React.FC = () => {
+  const [avatarPreview, setAvatarPreview] = useState<string | undefined>();
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
   const [form] = Form.useForm();
@@ -36,6 +38,10 @@ const ProfilePage: React.FC = () => {
       form.setFieldsValue({
         name: data.name,
       });
+      
+      if (data.avatarUrl) {
+        setAvatarPreview(data.avatarUrl);
+      }
     } catch (error) {
       messageApi.error("Erro ao carregar usuário");
     } finally {
@@ -47,7 +53,24 @@ const ProfilePage: React.FC = () => {
     try {
       setLoading(true);
 
-      console.log(values);
+      const id = localStorage.getItem("userId");
+
+      const formData = new FormData();
+      formData.append("name", values.name);
+
+      if (values.password) {
+        formData.append("password", values.password);
+      }
+
+      if (avatarFile) {
+        formData.append("avatar", avatarFile);
+      }
+
+      await api.put(`/user/${id}`, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
 
       messageApi.success("Perfil atualizado com sucesso!");
     } catch (error) {
@@ -76,9 +99,23 @@ const ProfilePage: React.FC = () => {
               gap: 16,
             }}
           >
-            <Avatar size={200} icon={<UserOutlined />} />
+            <Avatar
+              size={200}
+              src={avatarPreview}
+              icon={!avatarPreview && <UserOutlined />}
+            />
 
-            <Upload showUploadList={false}>
+            <Upload
+              showUploadList={false}
+              beforeUpload={(file) => {
+                setAvatarFile(file);
+
+                const preview = URL.createObjectURL(file);
+                setAvatarPreview(preview);
+
+                return false;
+              }}
+            >
               <Button icon={<UploadOutlined />}>Alterar foto</Button>
             </Upload>
           </div>
