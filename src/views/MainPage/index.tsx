@@ -5,7 +5,8 @@ import { ProjectCard } from "../../components/DashboardComponents/ProjectCard";
 import { AppLayout } from "../../components/LayoutComponents/AppLayout";
 import { DatabaseOutlined, RobotOutlined } from "@ant-design/icons";
 import { api } from "../../services/api";
-import CreateDiagram from "../../components/DashboardComponents/CreateDiagram";
+import CreateDiagramModal from "../../components/DashboardComponents/CreateDiagramModal";
+import GenerateDiagramModal from "../../components/DashboardComponents/GenerateDiagramModal";
 
 const { Title, Text } = Typography;
 
@@ -19,7 +20,10 @@ const MainPage: React.FC = () => {
   const navigate = useNavigate();
   const userId = localStorage.getItem("userId") || undefined;
   const [messageApi, contextHolder] = message.useMessage();
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCreateDiagramModalOpen, setIsCreateDiagramModalOpen] =
+    useState(false);
+  const [isGenerateDiagramModalOpen, setIsGenerateDiagramModalOpen] =
+    useState(false);
   const [recent, setRecent] = useState<Project[]>([]);
 
   useEffect(() => {
@@ -53,6 +57,10 @@ const MainPage: React.FC = () => {
     }
   };
 
+  const handleGenerate = async (prompt: string) => {
+    console.log('prompt', prompt);
+  }
+
   return (
     <AppLayout>
       {contextHolder}
@@ -61,10 +69,16 @@ const MainPage: React.FC = () => {
         Comece um novo projeto ou gere sua modelagem com ajuda da IA
       </Text>
 
-      <CreateDiagram
-        open={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+      <CreateDiagramModal
+        open={isCreateDiagramModalOpen}
+        onClose={() => setIsCreateDiagramModalOpen(false)}
         onCreate={handleCreate}
+      />
+
+      <GenerateDiagramModal
+        open={isGenerateDiagramModalOpen}
+        onClose={() => setIsGenerateDiagramModalOpen(false)}
+        onGenerate={handleGenerate}
       />
 
       <Row gutter={[24, 24]} style={{ marginTop: 24 }}>
@@ -73,7 +87,7 @@ const MainPage: React.FC = () => {
             icon={<DatabaseOutlined />}
             title="Diagrama ER"
             description="Criar modelagem do zero"
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => setIsCreateDiagramModalOpen(true)}
           />
         </Col>
 
@@ -82,7 +96,7 @@ const MainPage: React.FC = () => {
             icon={<RobotOutlined />}
             title="Gerar com IA"
             description="Descreva seu banco e deixe a IA montar"
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => setIsGenerateDiagramModalOpen(true)}
           />
         </Col>
       </Row>

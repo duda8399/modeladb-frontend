@@ -11,7 +11,7 @@ interface CreateDiagramProps {
   onCreate: (name: string) => void;
 }
 
-const CreateDiagram: React.FC<CreateDiagramProps> = ({
+const CreateDiagramModal: React.FC<CreateDiagramProps> = ({
   open,
   onClose,
   onCreate,
@@ -87,6 +87,7 @@ const CreateDiagram: React.FC<CreateDiagramProps> = ({
               style={{
                 background: "#2F7D32",
                 borderColor: "#2F7D32",
+                color: '#FFF',
                 width: 100,
               }}
             >
@@ -99,4 +100,4 @@ const CreateDiagram: React.FC<CreateDiagramProps> = ({
   );
 };
 
-export default CreateDiagram;
+export default CreateDiagramModal;
