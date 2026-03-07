@@ -1,24 +1,26 @@
 import { useReactFlow, type XYPosition } from "@xyflow/react";
 import { useCallback, useState } from "react";
+import { Input, Collapse, Button } from "antd";
 import { useDnD, useDnDPosition, type OnDropAction } from "./useDnD";
+import {
+  BorderOutlined,
+  FileOutlined,
+  FontSizeOutlined,
+} from "@ant-design/icons";
 
-// This is a simple ID generator for the nodes.
-// You can customize this to use your own ID generation logic.
+const { Panel } = Collapse;
+
 let id = 0;
 const getId = () => `dndnode_${id++}`;
 
 export function SidebarConstructor() {
   const { onDragStart, isDragging } = useDnD();
-  // The type of the node that is being dragged.
   const [type, setType] = useState<string | null>(null);
-
   const { setNodes } = useReactFlow();
 
   const createAddNewNode = useCallback(
     (nodeType: string): OnDropAction => {
       return ({ position }: { position: XYPosition }) => {
-        // Here, we create a new node and add it to the flow.
-        // You can customize the behavior of what happens when a node is dropped on the flow here.
         const newNode = {
           id: getId(),
           type: nodeType,
@@ -30,49 +32,87 @@ export function SidebarConstructor() {
         setType(null);
       };
     },
-    [setNodes, setType],
+    [setNodes],
   );
+
+  const startDrag = (event: any, nodeType: string) => {
+    setType(nodeType);
+    onDragStart(event, createAddNewNode(nodeType));
+  };
 
   return (
     <>
       {isDragging && <DragGhost type={type} />}
+
       <aside
         style={{
           background: "#fff",
           height: "100%",
           width: 260,
-          minWidth: 260,
-          flexShrink: 0,
-          padding: 10,
+          padding: "10px",
+          borderRight: "1px solid #e5e7eb",
         }}
       >
-        <div
-          className="dndnode input"
-          onPointerDown={(event) => {
-            setType("input");
-            onDragStart(event, createAddNewNode("input"));
-          }}
-        >
-          Input Node
-        </div>
-        <div
-          className="dndnode"
-          onPointerDown={(event) => {
-            setType("default");
-            onDragStart(event, createAddNewNode("default"));
-          }}
-        >
-          Default Node
-        </div>
-        <div
-          className="dndnode output"
-          onPointerDown={(event) => {
-            setType("output");
-            onDragStart(event, createAddNewNode("output"));
-          }}
-        >
-          Output Node
-        </div>
+        <Collapse defaultActiveKey={["ai", "er"]} ghost>
+          <Panel
+            header="IA do ModelaDB"
+            key="ai"
+            style={{ borderBottom: "1px solid #8c8c8c" }}
+          >
+            <Input.TextArea
+              placeholder="Descreva seu banco de dados..."
+              autoSize={{ minRows: 3, maxRows: 5 }}
+            />
+          </Panel>
+
+          <Panel
+            header="Padrão"
+            key="default"
+            style={{
+              borderBottom: "1px solid #8c8c8c",
+              background: "#fff",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
+              <Button icon={<FontSizeOutlined />} />
+              <Button icon={<BorderOutlined />} />
+              <Button icon={<FileOutlined />} />
+            </div>
+          </Panel>
+
+          <Panel
+            header="ER"
+            key="er"
+            style={{ borderBottom: "1px solid #8c8c8c" }}
+          >
+            <div
+              className="dndnode input"
+              onPointerDown={(event) => startDrag(event, "input")}
+            >
+              Input
+            </div>
+
+            <div
+              className="dndnode"
+              onPointerDown={(event) => startDrag(event, "default")}
+            >
+              Default
+            </div>
+
+            <div
+              className="dndnode output"
+              onPointerDown={(event) => startDrag(event, "output")}
+            >
+              Output
+            </div>
+          </Panel>
+        </Collapse>
       </aside>
     </>
   );
@@ -82,7 +122,6 @@ interface DragGhostProps {
   type: string | null;
 }
 
-// The DragGhost component is used to display a ghost node when dragging a node into the flow.
 export function DragGhost({ type }: DragGhostProps) {
   const { position } = useDnDPosition();
 
@@ -92,7 +131,7 @@ export function DragGhost({ type }: DragGhostProps) {
     <div
       className={`dndnode ghostnode ${type}`}
       style={{
-        transform: `translate(${position.x}px, ${position.y}px) translate(-50%, -50%)`,
+        transform: `translate(${position.y}px, ${position.x}px) translate(-50%, -50%)`,
       }}
     >
       {type && `${type.charAt(0).toUpperCase() + type.slice(1)} Node`}
