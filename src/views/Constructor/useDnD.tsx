@@ -8,9 +8,9 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-
+ 
 export type OnDropAction = ({ position }: { position: XYPosition }) => void;
-
+ 
 interface DnDContextType {
   // If a node is being dragged.
   isDragging: boolean;
@@ -19,9 +19,9 @@ interface DnDContextType {
   dropAction: OnDropAction | null;
   setDropAction: Dispatch<SetStateAction<OnDropAction | null>>;
 }
-
+ 
 const DnDContext = createContext<DnDContextType | null>(null);
-
+ 
 // The DnDProvider is used to provide the context for the DnD functionality.
 // This allows you to wrap your `ReactFlow` component instance in the `DnDProvider`,
 // so you do not need to register any callback in `App.tsx`.
@@ -30,7 +30,7 @@ const DnDContext = createContext<DnDContextType | null>(null);
 export function DnDProvider({ children }: { children: React.ReactNode }) {
   const [isDragging, setIsDragging] = useState(false);
   const [dropAction, setDropAction] = useState<OnDropAction | null>(null);
-
+ 
   return (
     <DnDContext.Provider
       value={{
@@ -45,20 +45,20 @@ export function DnDProvider({ children }: { children: React.ReactNode }) {
     </DnDContext.Provider>
   );
 }
-
+ 
 export default DnDContext;
-
+ 
 export const useDnD = () => {
   const { screenToFlowPosition } = useReactFlow();
-
+ 
   const context = useContext(DnDContext);
-
+ 
   if (!context) {
-    throw new Error("useDnD must be used within a DnDProvider");
+    throw new Error('useDnD must be used within a DnDProvider');
   }
-
+ 
   const { isDragging, setIsDragging, setDropAction, dropAction } = context;
-
+ 
   // This callback will be returned by the `useDnD` hook, and can be used in your UI,
   // when you want to start dragging a node into the flow.
   // For example, this is used in the `Sidebar` component.
@@ -71,71 +71,65 @@ export const useDnD = () => {
     },
     [setIsDragging, setDropAction],
   );
-
+ 
   const onDragEnd = useCallback(
     (event: PointerEvent) => {
       if (!isDragging) {
         setIsDragging(false);
         return;
       }
-
+ 
       (event.target as HTMLElement).releasePointerCapture(event.pointerId);
-
+ 
       // Use elementFromPoint to get the actual element under the pointer
-      const elementUnderPointer = document.elementFromPoint(
-        event.clientX,
-        event.clientY,
-      );
-      const isDroppingOnFlow = elementUnderPointer?.closest(".react-flow");
+      const elementUnderPointer = document.elementFromPoint(event.clientX, event.clientY);
+      const isDroppingOnFlow = elementUnderPointer?.closest('.react-flow');
       event.preventDefault();
-
+ 
       // Only allow dropping on the flow area
       if (isDroppingOnFlow) {
-        const flowPosition = screenToFlowPosition({
-          x: event.clientX,
-          y: event.clientY,
-        });
+        const flowPosition = screenToFlowPosition({ x: event.clientX, y: event.clientY });
         dropAction?.({ position: flowPosition });
       }
-
+ 
       setIsDragging(false);
     },
     [screenToFlowPosition, setIsDragging, dropAction],
   );
-
+ 
   // Add global touch event listeners
   useEffect(() => {
     if (!isDragging) return;
-
-    document.addEventListener("pointerup", onDragEnd);
-
+ 
+    document.addEventListener('pointerup', onDragEnd);
+ 
     return () => {
-      document.removeEventListener("pointerup", onDragEnd);
+      document.removeEventListener('pointerup', onDragEnd);
     };
   }, [onDragEnd, isDragging]);
-
+ 
   return {
     isDragging,
     onDragStart,
   };
 };
-
+ 
 export const useDnDPosition = () => {
   const [position, setPosition] = useState<XYPosition | undefined>(undefined);
-
+ 
   // By default, the pointer move event sets the position of the dragged element in the context.
   // This will be used to display the `DragGhost` component.
   const onDrag = useCallback((event: PointerEvent) => {
     event.preventDefault();
     setPosition({ x: event.clientX, y: event.clientY });
   }, []);
-
+ 
   useEffect(() => {
-    document.addEventListener("pointermove", onDrag);
+    document.addEventListener('pointermove', onDrag);
     return () => {
-      document.removeEventListener("pointermove", onDrag);
+      document.removeEventListener('pointermove', onDrag);
     };
   }, [onDrag]);
-
+ 
   return { position };
 };

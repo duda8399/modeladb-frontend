@@ -6,7 +6,6 @@ import {
   UserOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
-
 const { Header } = Layout;
 
 type HeaderBarProps = {

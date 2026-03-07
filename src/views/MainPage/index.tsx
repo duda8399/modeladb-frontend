@@ -40,6 +40,8 @@ const MainPage: React.FC = () => {
   }
 
   const handleCreate = async (name: string) => {
+    navigate(`/model/1234`);
+
     try {
       const { data } = await api.post("/diagram/create", { name, userId });
 

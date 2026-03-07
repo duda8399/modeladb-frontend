@@ -3,14 +3,17 @@ import "@xyflow/react/dist/style.css";
 import {
   Background,
   Controls,
+  MiniMap,
   ReactFlow,
   addEdge,
   useEdgesState,
   useNodesState,
   type Connection,
 } from "@xyflow/react";
-import { AppLayout } from "../../components/LayoutComponents/AppLayout";
 import { SidebarConstructor } from "./SidebarConstructor";
+import { Layout } from "antd";
+import { Navbar } from "../../components/LayoutComponents/Navbar";
+import { EditorToolbar } from "./EditorToolbar";
 
 const ConstructorPage: React.FC = () => {
   const initialNodes = [
@@ -27,12 +30,22 @@ const ConstructorPage: React.FC = () => {
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
-    []
+    [],
   );
 
   return (
-    <AppLayout>
-      <div style={{ display: "flex", height: "100vh" }}>
+    <Layout>
+      <Navbar />
+      <EditorToolbar />
+
+      <div
+        style={{
+          display: "flex",
+          height: "calc(100vh - 64px)",
+          overflow: "hidden",
+        }}
+      >
+        <SidebarConstructor />
 
         <div style={{ flex: 1 }}>
           <ReactFlow
@@ -43,22 +56,18 @@ const ConstructorPage: React.FC = () => {
             onConnect={onConnect}
             fitView
           >
-            <Controls />
             <Background />
+            <Controls
+              position="bottom-right"
+              style={{ right: 210, bottom: 20 }}
+              fitViewOptions={{ maxZoom: 1, padding: 0.2, duration: 300 }}
+            />
+
+            <MiniMap pannable zoomable nodeColor={"gray"} />
           </ReactFlow>
         </div>
-
-        <div
-          style={{
-            width: 200,
-            borderLeft: "1px solid #e5e7eb",
-            background: "#f9fafb",
-          }}
-        >
-          <SidebarConstructor />
-        </div>
       </div>
-    </AppLayout>
+    </Layout>
   );
 };
 

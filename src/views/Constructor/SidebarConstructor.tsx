@@ -35,20 +35,17 @@ export function SidebarConstructor() {
 
   return (
     <>
-      {/* The ghost node will be rendered at pointer position when dragging. */}
       {isDragging && <DragGhost type={type} />}
       <aside
         style={{
+          background: "#fff",
           height: "100%",
-          width: "100%",
-          padding: 16,
-          boxSizing: "border-box",
-          overflowY: "auto",
+          width: 260,
+          minWidth: 260,
+          flexShrink: 0,
+          padding: 10,
         }}
       >
-        <div className="description">
-          You can drag these nodes to the pane to create new nodes.
-        </div>
         <div
           className="dndnode input"
           onPointerDown={(event) => {
