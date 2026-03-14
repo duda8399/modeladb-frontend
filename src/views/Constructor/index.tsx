@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import "@xyflow/react/dist/style.css";
 import {
   Background,
@@ -14,17 +14,21 @@ import { SidebarConstructor } from "./SidebarConstructor";
 import { Layout } from "antd";
 import { Navbar } from "../../components/LayoutComponents/Navbar";
 import { EditorToolbar } from "./EditorToolbar";
+import EntityNode from "../../components/ConstructorComponents/EntityNode";
 
 const ConstructorPage: React.FC = () => {
   const initialNodes = [
     {
       id: "1",
-      type: "input",
-      data: { label: "input node" },
-      position: { x: 250, y: 5 },
+      type: "entityNode",
+      data: {},
+      position: { x: 0.2, y: 0 },
     },
   ];
 
+  const [nodeTypes, setNodeTypes] = useState({
+    entityNode: EntityNode,
+  });
   const [nodes, _, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
@@ -34,7 +38,7 @@ const ConstructorPage: React.FC = () => {
   );
 
   return (
-    <Layout>
+    <Layout style={{ margin: 0, padding: 0 }}>
       <Navbar />
       <EditorToolbar />
 
@@ -54,6 +58,7 @@ const ConstructorPage: React.FC = () => {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            nodeTypes={nodeTypes}
             fitView
           >
             <Background />

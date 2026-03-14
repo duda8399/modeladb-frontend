@@ -19,6 +19,7 @@ const nodeStyle = {
   marginBottom: 8,
   transition: "all 0.2s",
   fontWeight: "normal",
+  textAlign: "center" as const,
 };
 
 export function SidebarConstructor() {
@@ -66,7 +67,7 @@ export function SidebarConstructor() {
         >
           <Button
             style={{
-              backgroundColor: "#1677ff",
+              backgroundColor: "#2F7D32",
               color: "#fff",
             }}
             icon={<ThunderboltOutlined />}
@@ -91,7 +92,7 @@ export function SidebarConstructor() {
             paddingBottom: 10,
           }}
         >
-          <AppstoreOutlined style={{ color: "#52c41a", fontSize: 16 }} />
+          <AppstoreOutlined style={{ color: "#2F7D32", fontSize: 16 }} />
           <span style={{ fontWeight: "bold" }}>Padrão</span>
         </div>
 
@@ -99,12 +100,12 @@ export function SidebarConstructor() {
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(3, 1fr)",
-            gap: 8,
+            gap: 6,
           }}
         >
-          <Button icon={<FontSizeOutlined />} />
-          <Button icon={<BorderOutlined />} />
-          <Button icon={<FileOutlined />} />
+          <Button block style={{ height: 60 }} icon={<FontSizeOutlined style={{ fontSize: 20 }}   />} />
+          <Button block style={{ height: 60 }} icon={<BorderOutlined style={{ fontSize: 20 }}  />} />
+          <Button block style={{ height: 60 }} icon={<FileOutlined style={{ fontSize: 20 }}  />} />
         </div>
       </div>
 
@@ -121,9 +122,7 @@ export function SidebarConstructor() {
         <span style={{ fontWeight: "bold" }}>ER</span>
       </div>
 
-      <div style={nodeStyle}>Input Node</div>
-      <div style={nodeStyle}>Default Node</div>
-      <div style={nodeStyle}>Output Node</div>
+      <div style={nodeStyle}>Adicionar Entidade</div>
     </aside>
   );
 }
