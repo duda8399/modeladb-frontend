@@ -2,7 +2,6 @@ import { BrowserRouter } from "react-router-dom";
 import { AppRoutes } from "./routes/AppRoutes";
 import { ConfigProvider } from "antd";
 import { ReactFlowProvider } from "@xyflow/react";
-import { DnDProvider } from "./views/Constructor/useDnD";
 
 function App() {
   return (
@@ -30,11 +29,9 @@ function App() {
       }}
     >
       <ReactFlowProvider>
-        <DnDProvider>
           <BrowserRouter>
             <AppRoutes />
           </BrowserRouter>
-        </DnDProvider>
       </ReactFlowProvider>
     </ConfigProvider>
   );

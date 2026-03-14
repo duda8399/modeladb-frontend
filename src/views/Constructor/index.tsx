@@ -41,7 +41,7 @@ const ConstructorPage: React.FC = () => {
       <div
         style={{
           display: "flex",
-          height: "calc(100vh - 64px)",
+          height: "87vh",
           overflow: "hidden",
         }}
       >

@@ -4,7 +4,9 @@ import {
   BgColorsOutlined,
   BoldOutlined,
   BorderOutlined,
+  ExportOutlined,
   FontColorsOutlined,
+  ImportOutlined,
   ItalicOutlined,
   LinkOutlined,
   UnderlineOutlined,
@@ -33,10 +35,10 @@ export function EditorToolbar() {
         height: 48,
         display: "flex",
         alignItems: "center",
-        gap: 12,
+        justifyContent: "space-between",
         padding: "0 16px",
         borderBottom: "1px solid #e5e7eb",
-        background: "#fff",
+        background: "#fafafa",
       }}
     >
       <Space size={8}>
@@ -47,22 +49,29 @@ export function EditorToolbar() {
         />
 
         <Select defaultValue={14} style={{ width: 70 }} options={sizeOptions} />
+
+        <Button icon={<BoldOutlined />} />
+        <Button icon={<ItalicOutlined />} />
+        <Button icon={<UnderlineOutlined />} />
+        <Button icon={<FontColorsOutlined />} />
+        <Button icon={<AlignCenterOutlined />} />
+
+        <Divider type="vertical" />
+
+        <Button icon={<BgColorsOutlined />} />
+        <Button icon={<BorderOutlined />} />
+
+        <Divider type="vertical" />
+
+        <Button icon={<LinkOutlined />} />
       </Space>
 
-      <Button icon={<BoldOutlined />} />
-      <Button icon={<ItalicOutlined />} />
-      <Button icon={<UnderlineOutlined />} />
-      <Button icon={<FontColorsOutlined />} />
-      <Button icon={<AlignCenterOutlined />} />
-
-      <Divider type="vertical" />
-
-      <Button icon={<BgColorsOutlined />} />
-      <Button icon={<BorderOutlined />} />
-
-      <Divider type="vertical" />
-
-      <Button icon={<LinkOutlined />} />
+      <Space>
+        <Button><ImportOutlined /> Importar</Button>
+        <Button><ExportOutlined /> Exportar </Button>
+        <Button>Descartar alterações</Button>
+        <Button type="primary">Salvar</Button>
+      </Space>
     </div>
   );
 }
