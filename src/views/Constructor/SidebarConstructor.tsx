@@ -22,7 +22,11 @@ const nodeStyle = {
   textAlign: "center" as const,
 };
 
-export function SidebarConstructor() {
+interface Props {
+  onAddEntity: () => void;
+}
+
+export function SidebarConstructor({ onAddEntity }: Props) {
   return (
     <aside
       style={{
@@ -103,9 +107,21 @@ export function SidebarConstructor() {
             gap: 6,
           }}
         >
-          <Button block style={{ height: 60 }} icon={<FontSizeOutlined style={{ fontSize: 20 }}   />} />
-          <Button block style={{ height: 60 }} icon={<BorderOutlined style={{ fontSize: 20 }}  />} />
-          <Button block style={{ height: 60 }} icon={<FileOutlined style={{ fontSize: 20 }}  />} />
+          <Button
+            block
+            style={{ height: 60 }}
+            icon={<FontSizeOutlined style={{ fontSize: 20 }} />}
+          />
+          <Button
+            block
+            style={{ height: 60 }}
+            icon={<BorderOutlined style={{ fontSize: 20 }} />}
+          />
+          <Button
+            block
+            style={{ height: 60 }}
+            icon={<FileOutlined style={{ fontSize: 20 }} />}
+          />
         </div>
       </div>
 
@@ -122,7 +138,9 @@ export function SidebarConstructor() {
         <span style={{ fontWeight: "bold" }}>ER</span>
       </div>
 
-      <div style={nodeStyle}>Adicionar Entidade</div>
+      <div style={nodeStyle} onClick={onAddEntity}>
+        Adicionar Entidade
+      </div>
     </aside>
   );
 }
