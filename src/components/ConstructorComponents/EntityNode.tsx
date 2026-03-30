@@ -1,7 +1,9 @@
 import { memo, useState } from "react";
 import { Card, Row, Col, Button, Input } from "antd";
-import { DeleteOutlined } from "@ant-design/icons";
-import ModalAttributes from "./ModalAttributes";
+import { DeleteOutlined, KeyOutlined } from "@ant-design/icons";
+import AttributesModal from "./AttributesModal";
+import DeleteModal from "./DeleteModal";
+import { Handle, Position } from "@xyflow/react";
 
 interface Field {
   id: number;
@@ -15,12 +17,23 @@ interface Field {
 
 export default memo(function EntityNode() {
   const [open, setOpen] = useState(false);
+  const [openDelete, setOpenDelete] = useState(false);
   const [entityName, setEntityName] = useState("Entidade");
   const [fields, setFields] = useState<Field[]>([]);
 
   return (
     <>
-      <ModalAttributes
+      <DeleteModal
+        open={openDelete}
+        setOpen={setOpenDelete}
+        description={
+          <span>
+            Tem certeza que deseja excluir a entidade <b>{entityName}</b>?
+          </span>
+        }
+      />
+
+      <AttributesModal
         open={open}
         setOpen={setOpen}
         fields={fields}
@@ -60,7 +73,10 @@ export default memo(function EntityNode() {
               }}
             />
 
-            <DeleteOutlined style={{ cursor: "pointer", color: "#B11226" }} />
+            <DeleteOutlined
+              style={{ cursor: "pointer", color: "#B11226" }}
+              onClick={() => setOpenDelete(true)}
+            />
           </div>
         }
       >
@@ -77,7 +93,10 @@ export default memo(function EntityNode() {
                 borderRight: "1px solid #f0f0f0",
               }}
             >
-              {field.name || "-"}
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                {field.pk && <KeyOutlined style={{ color: "#faad14" }} />}
+                <span>{field.name || "-"}</span>
+              </div>
             </Col>
 
             <Col span={12} style={{ padding: "6px 8px" }}>
@@ -102,6 +121,9 @@ export default memo(function EntityNode() {
             Configurar atributos
           </Button>
         </div>
+
+        <Handle type="target" position={Position.Left} />
+<Handle type="source" position={Position.Right} />
       </Card>
     </>
   );

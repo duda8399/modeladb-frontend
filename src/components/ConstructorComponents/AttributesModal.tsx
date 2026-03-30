@@ -33,7 +33,7 @@ interface Field {
   ai: boolean;
 }
 
-export default function ModalAttributes({
+export default function Attributes({
   open,
   setOpen,
   fields,

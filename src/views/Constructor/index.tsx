@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import "@xyflow/react/dist/style.css";
 import {
   Background,
@@ -9,14 +9,21 @@ import {
   useEdgesState,
   useNodesState,
   type Connection,
+  type Edge,
   type Node,
 } from "@xyflow/react";
-
 import { SidebarConstructor } from "./SidebarConstructor";
 import { Layout } from "antd";
 import { Navbar } from "../../components/LayoutComponents/Navbar";
 import { EditorToolbar } from "./EditorToolbar";
 import EntityNode from "../../components/ConstructorComponents/EntityNode";
+import RelationModal from "../../components/ConstructorComponents/RelationModal";
+
+type CustomEdge = Edge & {
+  data?: {
+    relationType: "1:1" | "1:N" | "N:N";
+  };
+};
 
 const ConstructorPage: React.FC = () => {
   const nodeTypes = useMemo(
@@ -26,13 +33,17 @@ const ConstructorPage: React.FC = () => {
     [],
   );
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-
-  const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge(params, eds)),
-    [setEdges],
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<CustomEdge>([]);
+  const [pendingConnection, setPendingConnection] = useState<Connection | null>(
+    null,
   );
+  const [openRelationModal, setOpenRelationModal] = useState(false);
+
+  const onConnect = useCallback((params: Connection) => {
+    setPendingConnection(params);
+    setOpenRelationModal(true);
+  }, []);
 
   const addEntityNode = useCallback(() => {
     const newNode: Node = {
@@ -50,6 +61,29 @@ const ConstructorPage: React.FC = () => {
 
   return (
     <Layout style={{ margin: 0, padding: 0 }}>
+      <RelationModal
+        open={openRelationModal}
+        onCancel={() => setOpenRelationModal(false)}
+        onSelect={(relationType) => {
+          if (!pendingConnection) return;
+
+          setEdges((eds) =>
+            addEdge(
+              {
+                ...pendingConnection,
+                label: relationType,
+                type: "bezier",
+                data: { relationType },
+              },
+              eds,
+            ),
+          );
+
+          setPendingConnection(null);
+          setOpenRelationModal(false);
+        }}
+      />
+
       <Navbar />
       <EditorToolbar />
 
@@ -71,6 +105,10 @@ const ConstructorPage: React.FC = () => {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             fitView
+            defaultEdgeOptions={{
+              style: { strokeWidth: 2 },
+              labelStyle: { fill: "#333", fontWeight: 600 },
+            }}
           >
             <Background />
 
