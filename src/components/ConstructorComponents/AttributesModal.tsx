@@ -29,19 +29,19 @@ export default function Attributes({
   fields,
   setFields,
 }: Readonly<Props>) {
-  const generateId = () => crypto.randomUUID();
 
   const addField = () => {
     setFields([
       ...fields,
       {
-        id: generateId(),
-        name: "",
-        type: "VARCHAR",
-        pk: false,
-        notNull: false,
-        unique: false,
-        ai: false,
+        id: crypto.randomUUID(),
+        name: "id",
+        type: "INT",
+        pk: true,
+        fk: false,
+        notNull: true,
+        unique: true,
+        ai: true,
       },
     ]);
   };
@@ -88,16 +88,20 @@ export default function Attributes({
     >
       <Space direction="vertical" size="middle" style={{ width: "100%" }}>
         <Row gutter={16} style={{ paddingTop: 8 }} align="middle">
-          <Col span={7}>
+          <Col span={6}>
             <Text strong>Coluna</Text>
           </Col>
 
-          <Col span={7}>
+          <Col span={6}>
             <Text strong>Tipo</Text>
           </Col>
 
           <Col span={2}>
             <Text strong>PK</Text>
+          </Col>
+
+          <Col span={2}>
+            <Text strong>FK</Text>
           </Col>
 
           <Col span={2}>
@@ -119,7 +123,7 @@ export default function Attributes({
 
         {fields.map((field) => (
           <Row key={field.id} gutter={16} align="middle">
-            <Col span={7}>
+            <Col span={6}>
               <Input
                 placeholder="Nome da coluna"
                 value={field.name}
@@ -129,7 +133,7 @@ export default function Attributes({
               />
             </Col>
 
-            <Col span={7}>
+            <Col span={6}>
               <Select
                 value={field.type}
                 style={{ width: "100%" }}
@@ -148,6 +152,13 @@ export default function Attributes({
               <Checkbox
                 checked={field.pk}
                 onChange={(e) => updateField(field.id, "pk", e.target.checked)}
+              />
+            </Col>
+
+            <Col span={2}>
+              <Checkbox
+                checked={field.fk}
+                onChange={(e) => updateField(field.id, "fk", e.target.checked)}
               />
             </Col>
 

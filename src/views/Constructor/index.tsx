@@ -72,7 +72,8 @@ const ConstructorPage: React.FC = () => {
             name: `fk_${sourceNodeId}`,
             type: "INT",
             pk: false,
-            notNull: true,
+            fk: true,
+            notNull: false,
             unique: false,
             ai: false,
           };

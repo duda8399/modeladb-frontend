@@ -11,6 +11,7 @@ export interface Field {
   name: string;
   type: string;
   pk: boolean;
+  fk: boolean;
   notNull: boolean;
   unique: boolean;
   ai: boolean;
