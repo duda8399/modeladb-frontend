@@ -1,7 +1,7 @@
 import { BrowserRouter } from "react-router-dom";
 import { AppRoutes } from "./routes/AppRoutes";
 import { ConfigProvider } from "antd";
-import { ReactFlowProvider } from "@xyflow/react";
+import { ReactFlowProvider } from "reactflow";
 
 function App() {
   return (

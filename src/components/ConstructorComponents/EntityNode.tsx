@@ -3,23 +3,39 @@ import { Card, Row, Col, Button, Input } from "antd";
 import { DeleteOutlined, KeyOutlined } from "@ant-design/icons";
 import AttributesModal from "./AttributesModal";
 import DeleteModal from "./DeleteModal";
-import { Handle, Position } from "@xyflow/react";
+import { Handle, Position, useReactFlow } from "reactflow";
+import type { Field } from "../../types/diagramER";
 
-interface Field {
-  id: number;
-  name: string;
-  type: string;
-  pk: boolean;
-  notNull: boolean;
-  unique: boolean;
-  ai: boolean;
+interface Props {
+  id: string;
+  data: {
+    fields?: Field[];
+  };
 }
 
-export default memo(function EntityNode() {
+export default memo(function EntityNode({ id, data }: Props) {
+  const { setNodes } = useReactFlow();
+  const fields = data.fields || [];
   const [open, setOpen] = useState(false);
   const [openDelete, setOpenDelete] = useState(false);
   const [entityName, setEntityName] = useState("Entidade");
-  const [fields, setFields] = useState<Field[]>([]);
+
+  const updateFields = (newFields: Field[]) => {
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.id === id) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              fields: newFields,
+            },
+          };
+        }
+        return node;
+      }),
+    );
+  };
 
   return (
     <>
@@ -37,7 +53,7 @@ export default memo(function EntityNode() {
         open={open}
         setOpen={setOpen}
         fields={fields}
-        setFields={setFields}
+        setFields={updateFields}
       />
 
       <Card
@@ -61,7 +77,7 @@ export default memo(function EntityNode() {
           >
             <Input
               value={entityName}
-              onChange={(e) => setEntityName(e.target.value)}
+              onChange={(e: any) => setEntityName(e.target.value)}
               size="small"
               style={{
                 fontWeight: "bold",
@@ -123,7 +139,7 @@ export default memo(function EntityNode() {
         </div>
 
         <Handle type="target" position={Position.Left} />
-<Handle type="source" position={Position.Right} />
+        <Handle type="source" position={Position.Right} />
       </Card>
     </>
   );

@@ -12,7 +12,7 @@ import {
   Tooltip,
   Typography,
 } from "antd";
-import { useRef } from "react";
+import type { Field } from "../../types/diagramER";
 
 const { Title, Text } = Typography;
 
@@ -20,17 +20,7 @@ interface Props {
   open: boolean;
   setOpen: (state: boolean) => void;
   fields: Field[];
-  setFields: React.Dispatch<React.SetStateAction<Field[]>>;
-}
-
-interface Field {
-  id: number;
-  name: string;
-  type: string;
-  pk: boolean;
-  notNull: boolean;
-  unique: boolean;
-  ai: boolean;
+  setFields: (fields: Field[]) => void;
 }
 
 export default function Attributes({
@@ -39,13 +29,11 @@ export default function Attributes({
   fields,
   setFields,
 }: Readonly<Props>) {
-  const initialId = useRef(1);
-
-  const generateId = () => initialId.current++;
+  const generateId = () => crypto.randomUUID();
 
   const addField = () => {
-    setFields((prev) => [
-      ...prev,
+    setFields([
+      ...fields,
       {
         id: generateId(),
         name: "",
@@ -58,13 +46,13 @@ export default function Attributes({
     ]);
   };
 
-  const removeField = (id: number) => {
-    setFields((prev) => prev.filter((field) => field.id !== id));
+  const removeField = (id: string) => {
+    setFields(fields.filter((field) => field.id !== id));
   };
 
-  const updateField = (id: number, key: keyof Field, value: any) => {
-    setFields((prev) =>
-      prev.map((field) =>
+  const updateField = (id: string, key: keyof Field, value: any) => {
+    setFields(
+      fields.map((field) =>
         field.id === id ? { ...field, [key]: value } : field,
       ),
     );
@@ -135,7 +123,9 @@ export default function Attributes({
               <Input
                 placeholder="Nome da coluna"
                 value={field.name}
-                onChange={(e) => updateField(field.id, "name", e.target.value)}
+                onChange={(e: any) =>
+                  updateField(field.id, "name", e.target.value)
+                }
               />
             </Col>
 
@@ -189,7 +179,11 @@ export default function Attributes({
             <Col span={1}>
               <Tooltip title="Remover atributo">
                 <Button
-                  style={{backgroundColor: '#B11226', border: 'none', color: '#FFF'}}
+                  style={{
+                    backgroundColor: "#B11226",
+                    border: "none",
+                    color: "#FFF",
+                  }}
                   shape="circle"
                   icon={<DeleteOutlined />}
                   onClick={() => removeField(field.id)}
@@ -206,7 +200,12 @@ export default function Attributes({
             borderBottom: "1px solid #f0f0f0",
           }}
         >
-          <Button type="dashed" style={{fontWeight: 'bold', fontSize: '12pt'}} block onClick={addField}>
+          <Button
+            type="dashed"
+            style={{ fontWeight: "bold", fontSize: "12pt" }}
+            block
+            onClick={addField}
+          >
             + Adicionar atributo
           </Button>
         </div>
