@@ -56,7 +56,25 @@ const ConstructorPage: React.FC = () => {
 
         const loadedName = data?.name || "";
         const loadedNodes = Array.isArray(data?.nodes) ? data.nodes : [];
-        const loadedEdges = Array.isArray(data?.edges) ? data.edges : [];
+        let loadedEdges = Array.isArray(data?.edges) ? data.edges : [];
+
+        loadedEdges = loadedEdges.map((edge: any) => {
+          if (!edge.data) {
+            const sourceNode = loadedNodes.find((n: any) => n.id === edge.source);
+            const sourceName = (sourceNode?.data as any)?.name || edge.source;
+
+            return {
+              ...edge,
+              data: {
+                relationType: "1:1",
+                sourceNodeId: edge.source,
+                targetNodeId: edge.target,
+                fkFieldName: `fk_${sourceName}_id`,
+              },
+            };
+          }
+          return edge;
+        });
 
         setDiagramName(loadedName);
         setNodes(loadedNodes);
@@ -165,7 +183,6 @@ const ConstructorPage: React.FC = () => {
 
       setEdges((eds) => [...eds, edge1, edge2]);
     } else {
-      // 1:1 e 1:N: adiciona aresta e adiciona FK no nó destino
       setEdges((eds) =>
         addEdge(
           {
@@ -264,6 +281,7 @@ const ConstructorPage: React.FC = () => {
           source: edge.source,
           sourceHandle: edge.sourceHandle || null,
           target: edge.target,
+          data: edge.data,
         })),
       });
 

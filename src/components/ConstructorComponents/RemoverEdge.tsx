@@ -52,11 +52,14 @@ export default function RemoveEdge({
             return node;
           }
 
+          const sourceNode = nodes.find((n) => n.id === sourceNodeId);
+          const sourceName = (sourceNode?.data as any)?.name || sourceNodeId;
+
           const currentFields = ((node.data as any)?.fields || []) as Array<{ name?: string; fk?: boolean }>;
           const fields = currentFields.filter((field) => {
             if (!field?.fk) return true;
             if (fkFieldName) return field.name !== fkFieldName;
-            return field.name !== `fk_${sourceNodeId}_id`;
+            return field.name !== `fk_${sourceName}_id`;
           });
 
           return {
