@@ -1,9 +1,7 @@
 import { Button, Divider, Select, Space } from "antd";
 import {
   AlignCenterOutlined,
-  BgColorsOutlined,
   BoldOutlined,
-  BorderOutlined,
   ExportOutlined,
   FontColorsOutlined,
   ImportOutlined,
@@ -11,6 +9,7 @@ import {
   LinkOutlined,
   UnderlineOutlined,
 } from "@ant-design/icons";
+import { SlActionRedo, SlActionUndo } from "react-icons/sl";
 
 const fontOptions = [
   { value: "Inter", label: "Inter" },
@@ -62,20 +61,20 @@ export function EditorToolbar({
 
         <Select defaultValue={14} style={{ width: 70 }} options={sizeOptions} />
 
-        <Button icon={<BoldOutlined />} />
-        <Button icon={<ItalicOutlined />} />
-        <Button icon={<UnderlineOutlined />} />
-        <Button icon={<FontColorsOutlined />} />
-        <Button icon={<AlignCenterOutlined />} />
+        <Button title="Negrito" icon={<BoldOutlined />} />
+        <Button title="Itálico" icon={<ItalicOutlined />} />
+        <Button title="Sublinhado" icon={<UnderlineOutlined />} />
+        <Button title="Cor da Fonte" icon={<FontColorsOutlined />} />
+        <Button title="Alinhar ao Centro" icon={<AlignCenterOutlined />} />
 
         <Divider type="vertical" />
 
-        <Button icon={<BgColorsOutlined />} />
-        <Button icon={<BorderOutlined />} />
+        <Button title="Compartilhar diagrama" icon={<LinkOutlined />} />
 
         <Divider type="vertical" />
 
-        <Button icon={<LinkOutlined />} />
+        <Button title="Desfazer" icon={<SlActionUndo />} />
+        <Button title="Refazer" icon={<SlActionRedo />} />
       </Space>
 
       <Space>
@@ -98,12 +97,8 @@ export function EditorToolbar({
         <Button type="primary" onClick={onSave} loading={saving}>
           Salvar
         </Button>
-        <Button>
-          <ImportOutlined /> Importar
-        </Button>
-        <Button>
-          <ExportOutlined /> Exportar{" "}
-        </Button>
+        <Button title="Importar" icon={<ImportOutlined />} />
+        <Button title="Exportar" icon={<ExportOutlined />} />
       </Space>
     </div>
   );
