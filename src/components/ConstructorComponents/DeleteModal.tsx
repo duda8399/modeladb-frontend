@@ -6,6 +6,7 @@ interface Props {
   setOpen: (value: boolean) => void;
   title?: string;
   description?: ReactNode;
+  onConfirm?: () => void;
 }
 
 export default function DeleteModal({
@@ -13,12 +14,14 @@ export default function DeleteModal({
   setOpen,
   title = "Excluir",
   description = "Tem certeza que deseja excluir a entidade?",
+  onConfirm,
 }: Props) {
   return (
     <Modal
       open={open}
       onCancel={() => setOpen(false)}
       onOk={() => {
+        if (onConfirm) onConfirm();
         setOpen(false);
       }}
       okText="Excluir"

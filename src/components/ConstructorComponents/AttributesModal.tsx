@@ -31,19 +31,30 @@ export default function Attributes({
 }: Readonly<Props>) {
 
   const addField = () => {
-    setFields([
-      ...fields,
-      {
-        id: crypto.randomUUID(),
-        name: "id",
-        type: "INT",
-        pk: true,
-        fk: false,
-        notNull: true,
-        unique: true,
-        ai: true,
-      },
-    ]);
+    const newField: Field =
+      fields.length === 0
+        ? {
+            id: crypto.randomUUID(),
+            name: "id",
+            type: "INT",
+            pk: true,
+            fk: false,
+            notNull: true,
+            unique: true,
+            ai: true,
+          }
+        : {
+            id: crypto.randomUUID(),
+            name: null,
+            type: null,
+            pk: false,
+            fk: false,
+            notNull: false,
+            unique: false,
+            ai: false,
+          };
+
+    setFields([...fields, newField]);
   };
 
   const removeField = (id: string) => {
@@ -126,7 +137,7 @@ export default function Attributes({
             <Col span={6}>
               <Input
                 placeholder="Nome da coluna"
-                value={field.name}
+                value={field.name ?? ""}
                 onChange={(e: any) =>
                   updateField(field.id, "name", e.target.value)
                 }
@@ -135,7 +146,7 @@ export default function Attributes({
 
             <Col span={6}>
               <Select
-                value={field.type}
+                value={field.type ?? undefined}
                 style={{ width: "100%" }}
                 onChange={(value) => updateField(field.id, "type", value)}
                 options={[

@@ -47,6 +47,9 @@ export default memo(function EntityNode({ id, data }: Props) {
             Tem certeza que deseja excluir a entidade <b>{entityName}</b>?
           </span>
         }
+        onConfirm={() =>
+          setNodes((nds) => nds.filter((node) => node.id !== id))
+        }
       />
 
       <AttributesModal

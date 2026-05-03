@@ -8,8 +8,8 @@ export interface RemoveEdgeData {
 
 export interface Field {
   id: string;
-  name: string;
-  type: string;
+  name: string | null;
+  type: string | null;
   pk: boolean;
   fk: boolean;
   notNull: boolean;
