@@ -28,7 +28,21 @@ const sizeOptions = [
   { value: 24, label: "24" },
 ];
 
-export function EditorToolbar() {
+interface EditorToolbarProps {
+  diagramName: string;
+  onDiagramNameChange: (name: string) => void;
+  onSave: () => void;
+  onDiscard: () => void;
+  saving?: boolean;
+}
+
+export function EditorToolbar({
+  diagramName,
+  onDiagramNameChange,
+  onSave,
+  onDiscard,
+  saving = false,
+}: EditorToolbarProps) {
   return (
     <div
       style={{
@@ -42,6 +56,22 @@ export function EditorToolbar() {
       }}
     >
       <Space size={8}>
+        <input
+          value={diagramName}
+          onChange={(e) => onDiagramNameChange(e.target.value)}
+          placeholder="Nome do diagrama"
+          style={{
+            width: 220,
+            height: 32,
+            border: "1px solid #d9d9d9",
+            borderRadius: 6,
+            padding: "0 10px",
+            fontSize: 14,
+          }}
+        />
+
+        <Divider type="vertical" />
+
         <Select
           defaultValue="Inter"
           style={{ width: 140 }}
@@ -69,8 +99,10 @@ export function EditorToolbar() {
       <Space>
         <Button><ImportOutlined /> Importar</Button>
         <Button><ExportOutlined /> Exportar </Button>
-        <Button>Descartar alterações</Button>
-        <Button type="primary">Salvar</Button>
+        <Button onClick={onDiscard}>Descartar alterações</Button>
+        <Button type="primary" onClick={onSave} loading={saving}>
+          Salvar
+        </Button>
       </Space>
     </div>
   );

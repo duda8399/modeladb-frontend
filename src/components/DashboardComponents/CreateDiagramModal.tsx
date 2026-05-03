@@ -8,7 +8,7 @@ const { Title } = Typography;
 interface CreateDiagramProps {
   open: boolean;
   onClose: () => void;
-  onCreate: (name: string) => void;
+  onCreate: (name: string) => Promise<void>;
 }
 
 const CreateDiagramModal: React.FC<CreateDiagramProps> = ({
@@ -25,11 +25,11 @@ const CreateDiagramModal: React.FC<CreateDiagramProps> = ({
     }
   }, [open]);
 
-  const handleCreate = () => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
+  const handleCreate = async () => {
+    const modelName = name.trim();
+    if (!modelName) return;
 
-    onCreate(trimmed);
+    await onCreate(modelName);
     setName("");
     onClose();
   };
@@ -40,7 +40,13 @@ const CreateDiagramModal: React.FC<CreateDiagramProps> = ({
   };
 
   return (
-    <Modal open={open} onCancel={handleCancel} footer={null} width={650} centered>
+    <Modal
+      open={open}
+      onCancel={handleCancel}
+      footer={null}
+      width={650}
+      centered
+    >
       <div
         style={{
           display: "flex",
@@ -87,7 +93,7 @@ const CreateDiagramModal: React.FC<CreateDiagramProps> = ({
               style={{
                 background: "#2F7D32",
                 borderColor: "#2F7D32",
-                color: '#FFF',
+                color: "#FFF",
                 width: 100,
               }}
             >

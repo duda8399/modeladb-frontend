@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import "reactflow/dist/style.css";
 import {
   Background,
@@ -12,15 +12,19 @@ import {
   type Edge,
 } from "reactflow";
 import { SidebarConstructor } from "./SidebarConstructor";
-import { Layout } from "antd";
+import { Layout, message } from "antd";
 import { Navbar } from "../../components/LayoutComponents/Navbar";
 import { EditorToolbar } from "./EditorToolbar";
 import EntityNode from "../../components/ConstructorComponents/EntityNode";
 import RelationModal from "../../components/ConstructorComponents/RelationModal";
 import RemoveEdge from "../../components/ConstructorComponents/RemoverEdge";
 import type { CustomEdge, CustomNode, RemoveEdgeData } from "../../types/diagramER";
+import { useParams } from "react-router-dom";
+import { api } from "../../services/api";
 
 const ConstructorPage: React.FC = () => {
+  const { id } = useParams();
+  const [messageApi, contextHolder] = message.useMessage();
   const nodeTypes = useMemo(
     () => ({
       entityNode: EntityNode,
@@ -37,6 +41,37 @@ const ConstructorPage: React.FC = () => {
   const [removeEdgeData, setRemoveEdgeData] = useState<RemoveEdgeData | null>(
     null,
   );
+  const [diagramName, setDiagramName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [savedName, setSavedName] = useState("");
+  const [savedNodes, setSavedNodes] = useState<CustomNode[]>([]);
+  const [savedEdges, setSavedEdges] = useState<CustomEdge[]>([]);
+
+  useEffect(() => {
+    const loadDiagram = async () => {
+      if (!id) return;
+
+      try {
+        const { data } = await api.get(`/diagram/${id}`);
+
+        const loadedName = data?.name || "";
+        const loadedNodes = Array.isArray(data?.nodes) ? data.nodes : [];
+        const loadedEdges = Array.isArray(data?.edges) ? data.edges : [];
+
+        setDiagramName(loadedName);
+        setNodes(loadedNodes);
+        setEdges(loadedEdges);
+        setSavedName(loadedName);
+        setSavedNodes(loadedNodes);
+        setSavedEdges(loadedEdges);
+      } catch (error: any) {
+        const errorMessage = error?.response?.data?.message;
+        messageApi.error(errorMessage || "Nao foi possivel carregar o diagrama");
+      }
+    };
+
+    loadDiagram();
+  }, [id, messageApi, setEdges, setNodes]);
 
   const onConnect = useCallback((params: Connection) => {
     setPendingConnection(params);
@@ -207,8 +242,54 @@ const ConstructorPage: React.FC = () => {
     [],
   );
 
+  const handleSave = useCallback(async () => {
+    if (!id) return;
+
+    setSaving(true);
+
+    try {
+      await api.put(`/diagram/${id}`, {
+        name: diagramName,
+        nodes: nodes.map((node) => ({
+          id: node.id,
+          type: node.type || "entityNode",
+          data: node.data,
+          position: {
+            x: Number(node.position?.x ?? 0),
+            y: Number(node.position?.y ?? 0),
+          },
+        })),
+        edges: edges.map((edge) => ({
+          id: edge.id,
+          source: edge.source,
+          sourceHandle: edge.sourceHandle || null,
+          target: edge.target,
+        })),
+      });
+
+      setSavedName(diagramName);
+      setSavedNodes(nodes);
+      setSavedEdges(edges);
+
+      messageApi.success("Diagrama salvo com sucesso");
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.message;
+      messageApi.error(errorMessage || "Não foi possível salvar o diagrama");
+    } finally {
+      setSaving(false);
+    }
+  }, [diagramName, edges, id, messageApi, nodes]);
+
+  const handleDiscard = useCallback(() => {
+    setDiagramName(savedName);
+    setNodes(savedNodes);
+    setEdges(savedEdges);
+    messageApi.info("Alterações descartadas");
+  }, [messageApi, savedEdges, savedName, savedNodes, setEdges, setNodes]);
+
   return (
     <Layout style={{ margin: 0, padding: 0 }}>
+      {contextHolder}
       <RelationModal
         open={openRelationModal}
         onCancel={() => setOpenRelationModal(false)}
@@ -216,7 +297,13 @@ const ConstructorPage: React.FC = () => {
       />
 
       <Navbar />
-      <EditorToolbar />
+      <EditorToolbar
+        diagramName={diagramName}
+        onDiagramNameChange={setDiagramName}
+        onSave={handleSave}
+        onDiscard={handleDiscard}
+        saving={saving}
+      />
 
       <div
         style={{
