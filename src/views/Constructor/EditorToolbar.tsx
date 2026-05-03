@@ -1,6 +1,7 @@
 import { Button, Divider, Select, Space } from "antd";
 import {
   AlignCenterOutlined,
+  BgColorsOutlined,
   BoldOutlined,
   ExportOutlined,
   FontColorsOutlined,
@@ -66,13 +67,11 @@ export function EditorToolbar({
         <Button title="Sublinhado" icon={<UnderlineOutlined />} />
         <Button title="Cor da Fonte" icon={<FontColorsOutlined />} />
         <Button title="Alinhar ao Centro" icon={<AlignCenterOutlined />} />
+        <Button title="Adicionar cor de fundo" icon={<BgColorsOutlined />} />
 
         <Divider type="vertical" />
 
         <Button title="Compartilhar diagrama" icon={<LinkOutlined />} />
-
-        <Divider type="vertical" />
-
         <Button title="Desfazer" icon={<SlActionUndo />} />
         <Button title="Refazer" icon={<SlActionRedo />} />
       </Space>
