@@ -159,8 +159,16 @@ export default memo(function EntityNode({ id, data }: Props) {
           </Button>
         </div>
 
-        <Handle type="target" position={Position.Left} />
-        <Handle type="source" position={Position.Right} />
+        <Handle
+          type="target"
+          position={Position.Left}
+          style={{ width: 12, height: 12, left: -10, background: "#000000" }}
+        />
+        <Handle
+          type="source"
+          position={Position.Right}
+          style={{ width: 12, height: 12, right: -10, background: "#000000" }}
+        />
       </Card>
     </>
   );
