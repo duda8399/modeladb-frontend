@@ -76,7 +76,6 @@ export function EditorToolbar({
         <Divider type="vertical" />
 
         <Button icon={<LinkOutlined />} />
-        
       </Space>
 
       <Space>
@@ -96,14 +95,14 @@ export function EditorToolbar({
 
         <Divider type="vertical" />
 
+        <Button type="primary" onClick={onSave} loading={saving}>
+          Salvar
+        </Button>
         <Button>
           <ImportOutlined /> Importar
         </Button>
         <Button>
           <ExportOutlined /> Exportar{" "}
-        </Button>
-        <Button type="primary" onClick={onSave} loading={saving}>
-          Salvar
         </Button>
       </Space>
     </div>
