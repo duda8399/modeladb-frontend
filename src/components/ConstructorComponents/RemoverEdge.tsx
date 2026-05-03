@@ -1,5 +1,5 @@
 import trash from "../../assets/trash.svg";
-import type { RemoveEdgeData } from "../../types/diagramER";
+import type { CustomEdge, RemoveEdgeData } from "../../types/diagramER";
 import { Tooltip } from "antd";
 import { useReactFlow } from "reactflow";
 
@@ -14,9 +14,62 @@ export default function RemoveEdge({
   removeEdgeData,
   setRemoveEdgeData,
 }: Readonly<Props>) {
-  const { setEdges } = useReactFlow();
+  const { setEdges, setNodes, getEdges } = useReactFlow();
 
   const onRemoveEdgeClick = (edgeId: string) => {
+    const edgeToRemove = getEdges().find((edge) => edge.id === edgeId) as
+      | CustomEdge
+      | undefined;
+
+    if (edgeToRemove?.data?.relationType === "N:N" && edgeToRemove.data.junctionId) {
+      const junctionId = edgeToRemove.data.junctionId;
+
+      setEdges((edges) =>
+        edges.filter(
+          (edge) =>
+            edge.id !== edgeId &&
+            edge.source !== junctionId &&
+            edge.target !== junctionId,
+        ),
+      );
+
+      setNodes((nodes) => nodes.filter((node) => node.id !== junctionId));
+      setRemoveEdgeData(null);
+      return;
+    }
+
+    if (
+      edgeToRemove?.data?.relationType === "1:1" ||
+      edgeToRemove?.data?.relationType === "1:N"
+    ) {
+      const sourceNodeId = edgeToRemove.data?.sourceNodeId ?? edgeToRemove.source;
+      const targetNodeId = edgeToRemove.data?.targetNodeId ?? edgeToRemove.target;
+      const fkFieldName = edgeToRemove.data?.fkFieldName;
+
+      setNodes((nodes) =>
+        nodes.map((node) => {
+          if (node.id !== targetNodeId) {
+            return node;
+          }
+
+          const currentFields = ((node.data as any)?.fields || []) as Array<{ name?: string; fk?: boolean }>;
+          const fields = currentFields.filter((field) => {
+            if (!field?.fk) return true;
+            if (fkFieldName) return field.name !== fkFieldName;
+            return field.name !== `fk_${sourceNodeId}_id`;
+          });
+
+          return {
+            ...node,
+            data: {
+              ...(node.data as any),
+              fields,
+            },
+          };
+        }),
+      );
+    }
+
     setEdges((edges) => edges.filter((edge) => edge.id !== edgeId));
     setRemoveEdgeData(null);
   };

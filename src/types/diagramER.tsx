@@ -24,5 +24,9 @@ export interface CustomNode extends Node {
 export type CustomEdge = Edge & {
   data?: {
     relationType: "1:1" | "1:N" | "N:N";
+    sourceNodeId?: string;
+    targetNodeId?: string;
+    junctionId?: string;
+    fkFieldName?: string;
   };
 };

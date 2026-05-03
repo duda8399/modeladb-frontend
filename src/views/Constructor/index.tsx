@@ -106,7 +106,12 @@ const ConstructorPage: React.FC = () => {
         target: junctionId,
         label: "1:N",
         type: "bezier",
-        data: { relationType: "1:N" },
+        data: {
+          relationType: "1:N",
+          sourceNodeId: sourceNodeId as string,
+          targetNodeId: targetNodeId as string,
+          junctionId,
+        },
       };
 
       const edge2: CustomEdge = {
@@ -115,7 +120,12 @@ const ConstructorPage: React.FC = () => {
         target: targetNodeId as string,
         label: "1:N",
         type: "bezier",
-        data: { relationType: "1:N" },
+        data: {
+          relationType: "1:N",
+          sourceNodeId: sourceNodeId as string,
+          targetNodeId: targetNodeId as string,
+          junctionId,
+        },
       };
 
       setEdges((eds) => [...eds, edge1, edge2]);
@@ -127,7 +137,12 @@ const ConstructorPage: React.FC = () => {
             ...pendingConnection,
             label: relationType,
             type: "bezier",
-            data: { relationType },
+            data: {
+              relationType,
+              sourceNodeId: sourceNodeId as string,
+              targetNodeId: targetNodeId as string,
+              fkFieldName: `fk_${sourceName}_id`,
+            },
           },
           eds,
         ),
