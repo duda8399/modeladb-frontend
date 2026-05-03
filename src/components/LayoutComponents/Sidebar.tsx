@@ -1,5 +1,5 @@
 import { Layout, Menu } from "antd";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import LogoFull from "../../assets/logo.png";
 import LogoIcon from "../../assets/icon.png";
 import {
@@ -12,12 +12,18 @@ const { Sider } = Layout;
 
 export function Sidebar({ collapsed }: { collapsed: boolean }) {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const routes: Record<string, string> = {
     "1": "/",
     "2": "/documents",
     "3": "/shared",
   };
+
+  const selectedKey =
+    Object.entries(routes).find(([, path]) =>
+      path === "/" ? location.pathname === "/" : location.pathname.startsWith(path)
+    )?.[0] ?? "1";
 
   return (
     <Sider
@@ -52,7 +58,7 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
       <Menu
         theme="dark"
         mode="inline"
-        defaultSelectedKeys={["1"]}
+        selectedKeys={[selectedKey]}
         onClick={({ key }) => navigate(routes[key])}
         items={[
           {
