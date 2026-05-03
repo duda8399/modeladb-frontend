@@ -32,7 +32,6 @@ interface EditorToolbarProps {
   diagramName: string;
   onDiagramNameChange: (name: string) => void;
   onSave: () => void;
-  onDiscard: () => void;
   saving?: boolean;
 }
 
@@ -40,7 +39,6 @@ export function EditorToolbar({
   diagramName,
   onDiagramNameChange,
   onSave,
-  onDiscard,
   saving = false,
 }: EditorToolbarProps) {
   return (
@@ -104,7 +102,6 @@ export function EditorToolbar({
         <Button>
           <ExportOutlined /> Exportar{" "}
         </Button>
-        <Button onClick={onDiscard}>Descartar alterações</Button>
         <Button type="primary" onClick={onSave} loading={saving}>
           Salvar
         </Button>

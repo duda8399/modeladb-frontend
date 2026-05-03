@@ -43,9 +43,6 @@ const ConstructorPage: React.FC = () => {
   );
   const [diagramName, setDiagramName] = useState("");
   const [saving, setSaving] = useState(false);
-  const [savedName, setSavedName] = useState("");
-  const [savedNodes, setSavedNodes] = useState<CustomNode[]>([]);
-  const [savedEdges, setSavedEdges] = useState<CustomEdge[]>([]);
 
   useEffect(() => {
     const loadDiagram = async () => {
@@ -79,9 +76,6 @@ const ConstructorPage: React.FC = () => {
         setDiagramName(loadedName);
         setNodes(loadedNodes);
         setEdges(loadedEdges);
-        setSavedName(loadedName);
-        setSavedNodes(loadedNodes);
-        setSavedEdges(loadedEdges);
       } catch (error: any) {
         const errorMessage = error?.response?.data?.message;
         messageApi.error(errorMessage || "Nao foi possivel carregar o diagrama");
@@ -285,10 +279,6 @@ const ConstructorPage: React.FC = () => {
         })),
       });
 
-      setSavedName(diagramName);
-      setSavedNodes(nodes);
-      setSavedEdges(edges);
-
       messageApi.success("Diagrama salvo com sucesso");
     } catch (error: any) {
       const errorMessage = error?.response?.data?.message;
@@ -297,13 +287,6 @@ const ConstructorPage: React.FC = () => {
       setSaving(false);
     }
   }, [diagramName, edges, id, messageApi, nodes]);
-
-  const handleDiscard = useCallback(() => {
-    setDiagramName(savedName);
-    setNodes(savedNodes);
-    setEdges(savedEdges);
-    messageApi.info("Alterações descartadas");
-  }, [messageApi, savedEdges, savedName, savedNodes, setEdges, setNodes]);
 
   return (
     <Layout style={{ margin: 0, padding: 0 }}>
@@ -319,7 +302,6 @@ const ConstructorPage: React.FC = () => {
         diagramName={diagramName}
         onDiagramNameChange={setDiagramName}
         onSave={handleSave}
-        onDiscard={handleDiscard}
         saving={saving}
       />
 
