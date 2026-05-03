@@ -10,6 +10,7 @@ interface Props {
   id: string;
   data: {
     fields?: Field[];
+    name?: string;
   };
 }
 
@@ -18,7 +19,7 @@ export default memo(function EntityNode({ id, data }: Props) {
   const fields = data.fields || [];
   const [open, setOpen] = useState(false);
   const [openDelete, setOpenDelete] = useState(false);
-  const [entityName, setEntityName] = useState("Entidade");
+  const [entityName, setEntityName] = useState((data as any).name || "Entidade");
 
   const updateFields = (newFields: Field[]) => {
     setNodes((nds) =>
@@ -80,7 +81,24 @@ export default memo(function EntityNode({ id, data }: Props) {
           >
             <Input
               value={entityName}
-              onChange={(e: any) => setEntityName(e.target.value)}
+              onChange={(e: any) => {
+                const value = e.target.value;
+                setEntityName(value);
+                setNodes((nds) =>
+                  nds.map((node) => {
+                    if (node.id === id) {
+                      return {
+                        ...node,
+                        data: {
+                          ...node.data,
+                          name: value,
+                        },
+                      };
+                    }
+                    return node;
+                  }),
+                );
+              }}
               size="small"
               style={{
                 fontWeight: "bold",

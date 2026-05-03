@@ -49,47 +49,116 @@ const ConstructorPage: React.FC = () => {
     const targetNodeId = pendingConnection.target;
     const sourceNodeId = pendingConnection.source;
 
-    // Adiciona a relação como uma nova aresta
-    setEdges((eds) =>
-      addEdge(
-        {
-          ...pendingConnection,
-          label: relationType,
-          type: "bezier",
-          data: { relationType },
+    const sourceNode = nodes.find((n) => n.id === sourceNodeId);
+    const targetNode = nodes.find((n) => n.id === targetNodeId);
+
+    const sourceName = (sourceNode?.data as any)?.name || sourceNodeId;
+    const targetName = (targetNode?.data as any)?.name || targetNodeId;
+
+    if (relationType === "N:N") {
+      const junctionId = crypto.randomUUID();
+
+      const fkFieldSource = {
+        id: crypto.randomUUID(),
+        name: `fk_${sourceName}_id`,
+        type: "INT",
+        pk: true,
+        fk: true,
+        notNull: true,
+        unique: false,
+        ai: false,
+      };
+
+      const fkFieldTarget = {
+        id: crypto.randomUUID(),
+        name: `fk_${targetName}_id`,
+        type: "INT",
+        pk: true,
+        fk: true,
+        notNull: true,
+        unique: false,
+        ai: false,
+      };
+
+      const sx = (sourceNode?.position as any)?.x ?? 250;
+      const sy = (sourceNode?.position as any)?.y ?? 150;
+      const tx = (targetNode?.position as any)?.x ?? 250;
+      const ty = (targetNode?.position as any)?.y ?? 150;
+
+      const junctionNode: CustomNode = {
+        id: junctionId,
+        type: "entityNode",
+        position: {
+          x: (sx + tx) / 2,
+          y: (sy + ty) / 2,
         },
-        eds,
-      ),
-    );
+        data: {
+          name: `${sourceName}_${targetName}`,
+          fields: [fkFieldSource, fkFieldTarget],
+        },
+      };
 
-    // Adiciona a FK ao nó de destino
-    setNodes((nds) =>
-      nds.map((node) => {
-        console.log('Node ID:', node.id, 'Target Node ID:', targetNodeId);
-        if (node.id === targetNodeId) {
-          const newField = {
-            id: crypto.randomUUID(),
-            name: `fk_${sourceNodeId}`,
-            type: "INT",
-            pk: false,
-            fk: true,
-            notNull: false,
-            unique: false,
-            ai: false,
-          };
+      setNodes((nds) => [...nds, junctionNode]);
 
-          console.log('Adding field to node:', node.id, 'Field:', newField);
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              fields: [...(node.data.fields || []), newField],
-            },
-          };
-        }
-        return node;
-      }),
-    );
+      const edge1: CustomEdge = {
+        id: crypto.randomUUID(),
+        source: sourceNodeId as string,
+        target: junctionId,
+        label: "1:N",
+        type: "bezier",
+        data: { relationType: "1:N" },
+      };
+
+      const edge2: CustomEdge = {
+        id: crypto.randomUUID(),
+        source: junctionId,
+        target: targetNodeId as string,
+        label: "1:N",
+        type: "bezier",
+        data: { relationType: "1:N" },
+      };
+
+      setEdges((eds) => [...eds, edge1, edge2]);
+    } else {
+      // 1:1 e 1:N: adiciona aresta e adiciona FK no nó destino
+      setEdges((eds) =>
+        addEdge(
+          {
+            ...pendingConnection,
+            label: relationType,
+            type: "bezier",
+            data: { relationType },
+          },
+          eds,
+        ),
+      );
+
+      setNodes((nds) =>
+        nds.map((node) => {
+          if (node.id === targetNodeId) {
+            const newField = {
+              id: crypto.randomUUID(),
+              name: `fk_${sourceName}_id`,
+              type: "INT",
+              pk: false,
+              fk: true,
+              notNull: false,
+              unique: false,
+              ai: false,
+            };
+
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                fields: [...((node.data as any).fields || []), newField],
+              },
+            };
+          }
+          return node;
+        }),
+      );
+    }
 
     setPendingConnection(null);
     setOpenRelationModal(false);
@@ -104,6 +173,7 @@ const ConstructorPage: React.FC = () => {
         y: 150,
       },
       data: {
+        name: "Entidade",
         fields: [],
       },
     };
