@@ -135,11 +135,7 @@ export function Navbar() {
         placement="bottomRight"
       >
         <Button type="text" style={{ color: "#fff" }}>
-          <Avatar
-            size={36}
-            src={avatarUrl}
-            icon={!avatarUrl && <UserOutlined />}
-          />
+          <Avatar size={36} src={avatarUrl} icon={<UserOutlined />} />
         </Button>
       </Dropdown>
     </Header>

@@ -38,7 +38,7 @@ const ProfilePage: React.FC = () => {
       form.setFieldsValue({
         name: data.name,
       });
-      
+
       if (data.avatarUrl) {
         setAvatarPreview(data.avatarUrl);
       }
@@ -99,11 +99,7 @@ const ProfilePage: React.FC = () => {
               gap: 16,
             }}
           >
-            <Avatar
-              size={200}
-              src={avatarPreview}
-              icon={!avatarPreview && <UserOutlined />}
-            />
+            <Avatar size={36} src={avatarPreview} icon={<UserOutlined />} />
 
             <Upload
               showUploadList={false}
