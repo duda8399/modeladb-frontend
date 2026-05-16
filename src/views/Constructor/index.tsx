@@ -303,6 +303,10 @@ const ConstructorPage: React.FC = () => {
         onDiagramNameChange={setDiagramName}
         onSave={handleSave}
         saving={saving}
+        nodes={nodes}
+        edges={edges}
+        setNodes={setNodes}
+        setEdges={setEdges}
       />
 
       <div

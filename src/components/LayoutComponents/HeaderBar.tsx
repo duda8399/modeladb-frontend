@@ -32,7 +32,11 @@ const profileMenuItems: MenuProps["items"] = [
 
 export function HeaderBar({ collapsed, setCollapsed }: HeaderBarProps) {
   const navigate = useNavigate();
-  const avatarUrl = localStorage.getItem("avatar") || undefined;
+  const storedAvatar = localStorage.getItem("avatar");
+  const avatarUrl =
+    storedAvatar && storedAvatar !== "null" && storedAvatar !== "undefined"
+      ? storedAvatar
+      : undefined;
   const {
     token: { colorPrimary },
   } = theme.useToken();
@@ -81,7 +85,7 @@ export function HeaderBar({ collapsed, setCollapsed }: HeaderBarProps) {
           <Avatar
             size={36}
             src={avatarUrl}
-            icon={!avatarUrl && <UserOutlined />}
+            icon={<UserOutlined />}
           />
         </Button>
       </Dropdown>
