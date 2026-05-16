@@ -8,15 +8,19 @@ interface Props {
   setRemoveEdgeData: React.Dispatch<
     React.SetStateAction<RemoveEdgeData | null>
   >;
+  onBeforeRemoveEdge?: () => void;
 }
 
 export default function RemoveEdge({
   removeEdgeData,
   setRemoveEdgeData,
+  onBeforeRemoveEdge,
 }: Readonly<Props>) {
   const { setEdges, setNodes, getEdges } = useReactFlow();
 
   const onRemoveEdgeClick = (edgeId: string) => {
+    onBeforeRemoveEdge?.();
+
     const edgeToRemove = getEdges().find((edge) => edge.id === edgeId) as
       | CustomEdge
       | undefined;

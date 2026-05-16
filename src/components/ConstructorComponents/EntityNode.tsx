@@ -12,9 +12,10 @@ interface Props {
     fields?: Field[];
     name?: string;
   };
+  onBeforeDelete?: () => void;
 }
 
-export default memo(function EntityNode({ id, data }: Props) {
+export default memo(function EntityNode({ id, data, onBeforeDelete }: Props) {
   const { setNodes } = useReactFlow();
   const fields = data.fields || [];
   const [open, setOpen] = useState(false);
@@ -48,9 +49,10 @@ export default memo(function EntityNode({ id, data }: Props) {
             Tem certeza que deseja excluir a entidade <b>{entityName}</b>?
           </span>
         }
-        onConfirm={() =>
-          setNodes((nds) => nds.filter((node) => node.id !== id))
-        }
+        onConfirm={() => {
+          onBeforeDelete?.();
+          setNodes((nds) => nds.filter((node) => node.id !== id));
+        }}
       />
 
       <AttributesModal

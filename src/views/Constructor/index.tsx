@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "reactflow/dist/style.css";
 import {
   Background,
@@ -22,15 +22,17 @@ import type { CustomEdge, CustomNode, RemoveEdgeData } from "../../types/diagram
 import { useParams } from "react-router-dom";
 import { api } from "../../services/api";
 
+type DiagramSnapshot = {
+  nodes: CustomNode[];
+  edges: CustomEdge[];
+  diagramName: string;
+};
+
+const cloneSnapshot = (snapshot: DiagramSnapshot): DiagramSnapshot => structuredClone(snapshot);
+
 const ConstructorPage: React.FC = () => {
   const { id } = useParams();
   const [messageApi, contextHolder] = message.useMessage();
-  const nodeTypes = useMemo(
-    () => ({
-      entityNode: EntityNode,
-    }),
-    [],
-  );
 
   const [nodes, setNodes, onNodesChange] = useNodesState<CustomNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<CustomEdge>([]);
@@ -43,6 +45,81 @@ const ConstructorPage: React.FC = () => {
   );
   const [diagramName, setDiagramName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  const pastHistoryRef = useRef<DiagramSnapshot[]>([]);
+  const futureHistoryRef = useRef<DiagramSnapshot[]>([]);
+  const currentSnapshotRef = useRef<DiagramSnapshot>({
+    nodes: [],
+    edges: [],
+    diagramName: "",
+  });
+
+  useEffect(() => {
+    currentSnapshotRef.current = cloneSnapshot({
+      nodes,
+      edges,
+      diagramName,
+    });
+  }, [diagramName, edges, nodes]);
+
+  const syncHistoryAvailability = useCallback(() => {
+    setCanUndo(pastHistoryRef.current.length > 0);
+    setCanRedo(futureHistoryRef.current.length > 0);
+  }, []);
+
+  const createSnapshot = useCallback(
+    (): DiagramSnapshot => cloneSnapshot(currentSnapshotRef.current),
+    [],
+  );
+
+  const captureHistory = useCallback(() => {
+    pastHistoryRef.current.push(createSnapshot());
+    futureHistoryRef.current = [];
+    syncHistoryAvailability();
+  }, [createSnapshot, syncHistoryAvailability]);
+
+  const EntityNodeWithHistory = useCallback(
+    (props: any) => <EntityNode {...props} onBeforeDelete={captureHistory} />,
+    [captureHistory],
+  );
+  const nodeTypes = useMemo(
+    () => ({
+      entityNode: EntityNodeWithHistory,
+    }),
+    [EntityNodeWithHistory],
+  );
+
+  const applySnapshot = useCallback(
+    (snapshot: DiagramSnapshot) => {
+      setDiagramName(snapshot.diagramName);
+      setNodes(snapshot.nodes);
+      setEdges(snapshot.edges);
+    },
+    [setEdges, setNodes],
+  );
+
+  const handleUndo = useCallback(() => {
+    const previous = pastHistoryRef.current.pop();
+    if (!previous) return;
+
+    const current = createSnapshot();
+
+    futureHistoryRef.current.unshift(current);
+    applySnapshot(previous);
+    syncHistoryAvailability();
+  }, [applySnapshot, createSnapshot, syncHistoryAvailability]);
+
+  const handleRedo = useCallback(() => {
+    const next = futureHistoryRef.current.shift();
+    if (!next) return;
+
+    const current = createSnapshot();
+
+    pastHistoryRef.current.push(current);
+    applySnapshot(next);
+    syncHistoryAvailability();
+  }, [applySnapshot, createSnapshot, syncHistoryAvailability]);
 
   useEffect(() => {
     const loadDiagram = async () => {
@@ -76,6 +153,9 @@ const ConstructorPage: React.FC = () => {
         setDiagramName(loadedName);
         setNodes(loadedNodes);
         setEdges(loadedEdges);
+        pastHistoryRef.current = [];
+        futureHistoryRef.current = [];
+        syncHistoryAvailability();
       } catch (error: any) {
         const errorMessage = error?.response?.data?.message;
         messageApi.error(errorMessage || "Nao foi possivel carregar o diagrama");
@@ -83,7 +163,7 @@ const ConstructorPage: React.FC = () => {
     };
 
     loadDiagram();
-  }, [id, messageApi, setEdges, setNodes]);
+  }, [id, messageApi, setEdges, setNodes, syncHistoryAvailability]);
 
   const onConnect = useCallback((params: Connection) => {
     setPendingConnection(params);
@@ -92,6 +172,8 @@ const ConstructorPage: React.FC = () => {
 
   const onSelectRelationType = (relationType: "1:1" | "1:N" | "N:N") => {
     if (!pendingConnection) return;
+
+    captureHistory();
 
     const targetNodeId = pendingConnection.target;
     const sourceNodeId = pendingConnection.source;
@@ -226,6 +308,8 @@ const ConstructorPage: React.FC = () => {
   };
 
   const addEntityNode = useCallback(() => {
+    captureHistory();
+
     const newNode: CustomNode = {
       id: crypto.randomUUID(),
       type: "entityNode",
@@ -240,7 +324,7 @@ const ConstructorPage: React.FC = () => {
     };
 
     setNodes((nds) => [...nds, newNode]);
-  }, [setNodes]);
+  }, [captureHistory, setNodes]);
 
   const onEdgeMouseEnter = useCallback(
     (event: React.MouseEvent, edge: Edge) => {
@@ -307,6 +391,11 @@ const ConstructorPage: React.FC = () => {
         edges={edges}
         setNodes={setNodes}
         setEdges={setEdges}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onBeforeImportReplace={captureHistory}
       />
 
       <div
@@ -325,6 +414,7 @@ const ConstructorPage: React.FC = () => {
             nodeTypes={nodeTypes}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
+            onNodeDragStart={captureHistory}
             onConnect={onConnect}
             fitView
             defaultEdgeOptions={{
@@ -352,6 +442,7 @@ const ConstructorPage: React.FC = () => {
             <RemoveEdge
               removeEdgeData={removeEdgeData}
               setRemoveEdgeData={setRemoveEdgeData}
+              onBeforeRemoveEdge={captureHistory}
             />
           )}
         </div>
