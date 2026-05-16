@@ -9,10 +9,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <Layout>
+    <Layout style={{ minHeight: "100vh" }}>
       <Sidebar collapsed={collapsed} />
 
-      <Layout style={{ minHeight: "98vh" }}>
+      <Layout style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
         <HeaderBar collapsed={collapsed} setCollapsed={setCollapsed} />
 
         <Content
@@ -21,6 +21,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             padding: "5px 20px",
             background: "#fff",
             borderRadius: 2,
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
           }}
         >
           {children}

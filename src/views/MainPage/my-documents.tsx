@@ -1,9 +1,21 @@
-import React, { useEffect, useState } from "react";
-import { Col, Row, Typography, message } from "antd";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  Button,
+  Col,
+  Empty,
+  Input,
+  Pagination,
+  Row,
+  Typography,
+  message,
+} from "antd";
+import { PlusOutlined, SearchOutlined } from "@ant-design/icons";
+import { useNavigate } from "react-router-dom";
 import { AppLayout } from "../../components/LayoutComponents/AppLayout";
 import { api } from "../../services/api";
 import { getCurrentUser, getToken } from "../../utils/auth";
 import { DiagramCard } from "../../components/DashboardComponents/DiagramCard";
+import CreateDiagramModal from "../../components/DashboardComponents/CreateDiagramModal";
 
 const { Title } = Typography;
 
@@ -14,13 +26,72 @@ interface Project {
 }
 
 const MyDocumentsPage: React.FC = () => {
+  const navigate = useNavigate();
   const [documents, setDocuments] = useState<Project[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isCreateDiagramModalOpen, setIsCreateDiagramModalOpen] =
+    useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(6);
   const [messageApi, contextHolder] = message.useMessage();
+
+  const calculatePageSize = () => {
+    const cardRowHeight = 170;
+    const availableHeight = window.innerHeight;
+    const colsPerRow =
+      window.innerWidth >= 1200 ? 3 : window.innerWidth >= 768 ? 2 : 1;
+    const rowsCanFit = Math.max(1, Math.floor(availableHeight / cardRowHeight));
+
+    return rowsCanFit * colsPerRow;
+  };
+
+  useEffect(() => {
+    setPageSize(calculatePageSize());
+
+    const handleResize = () => {
+      setPageSize(calculatePageSize());
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const filteredDocuments = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    if (!normalizedSearch) {
+      return documents;
+    }
+
+    return documents.filter((doc) =>
+      doc.name.toLowerCase().includes(normalizedSearch),
+    );
+  }, [documents, searchTerm]);
+
+  const paginatedDocuments = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredDocuments.slice(startIndex, startIndex + pageSize);
+  }, [filteredDocuments, currentPage, pageSize]);
 
   useEffect(() => {
     loadDocuments();
   }, []);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    const totalPages = Math.max(
+      1,
+      Math.ceil(filteredDocuments.length / pageSize),
+    );
+
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [filteredDocuments.length, currentPage, pageSize]);
 
   async function loadDocuments() {
     try {
@@ -68,14 +139,70 @@ const MyDocumentsPage: React.FC = () => {
     }
   }
 
+  async function createDiagram(name: string) {
+    try {
+      const currentUser = getCurrentUser();
+      const userId = currentUser?.id;
+
+      const { data } = await api.post("/diagram/create", { name, userId });
+
+      if (data?.id) {
+        navigate(`/model/${data.id}`);
+      }
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.message;
+      const messageText = !errorMessage
+        ? "Ocorreu um erro ao criar o diagrama"
+        : errorMessage;
+
+      messageApi.error(messageText);
+    }
+  }
+
   return (
     <AppLayout>
       {contextHolder}
-      <Title level={3}>Meus documentos</Title>
 
-      <Row gutter={[24, 24]} style={{ marginTop: 24 }}>
-        {documents.map((doc) => (
-          <Col key={doc.id}>
+      <CreateDiagramModal
+        open={isCreateDiagramModalOpen}
+        onClose={() => setIsCreateDiagramModalOpen(false)}
+        onCreate={createDiagram}
+      />
+
+      <Row align="middle" justify="space-between" gutter={[12, 12]}>
+        <Col>
+          <Title level={3} style={{ marginBottom: 0 }}>
+            Meus documentos
+          </Title>
+        </Col>
+
+        <Col>
+          <Button
+            type="primary"
+            size="middle"
+            icon={<PlusOutlined />}
+            onClick={() => setIsCreateDiagramModalOpen(true)}
+          >
+            Criar Diagrama
+          </Button>
+        </Col>
+      </Row>
+
+      <Input
+        allowClear
+        placeholder="Buscar por nome do documento"
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        prefix={<SearchOutlined />}
+        style={{ maxWidth: "100%", width: 450, marginTop: 15 }}
+      />
+
+      <Row
+        gutter={[24, 24]}
+        style={{ marginTop: 24, flex: 1, alignContent: "flex-start" }}
+      >
+        {paginatedDocuments.map((doc) => (
+          <Col key={doc.id} xs={24} sm={24} md={12} lg={8}>
             <DiagramCard
               document={doc}
               onDelete={deleteDocument}
@@ -84,6 +211,28 @@ const MyDocumentsPage: React.FC = () => {
           </Col>
         ))}
       </Row>
+
+      {filteredDocuments.length === 0 && (
+        <Empty
+          description={
+            searchTerm
+              ? "Nenhum documento encontrado"
+              : "Você ainda não possui documentos"
+          }
+          style={{ marginTop: 32 }}
+        />
+      )}
+
+      {filteredDocuments.length > pageSize && (
+        <Row justify="center" style={{ marginTop: 24, marginBottom: 24 }}>
+          <Pagination
+            current={currentPage}
+            pageSize={pageSize}
+            total={filteredDocuments.length}
+            onChange={(page) => setCurrentPage(page)}
+          />
+        </Row>
+      )}
     </AppLayout>
   );
 };

@@ -55,14 +55,21 @@ export function DiagramCard({
     }
   };
 
-  const formattedUpdatedAt = new Date(document.updatedAt).toLocaleString("pt-BR");
+  const formattedUpdatedAt = new Date(document.updatedAt).toLocaleString("pt-BR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   return (
     <Card
       hoverable
       onClick={handleClick}
       style={{
-        width: 350,
+        width: "100%",
+        height: "100%",
         borderRadius: 12,
         background: "#F5F5F3",
       }}
@@ -107,17 +114,17 @@ export function DiagramCard({
           </Popconfirm>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 12, paddingRight: 72 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, paddingRight: "clamp(48px, 10vw, 80px)" }}>
           <div
             style={{
-              width: 44,
-              height: 44,
+              width: "clamp(32px, 8vw, 48px)",
+              height: "clamp(32px, 8vw, 48px)",
               borderRadius: 10,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               background: "#E8EDEB",
-              fontSize: 24,
+              fontSize: "clamp(16px, 3vw, 24px)",
               color: colorPrimary,
               flexShrink: 0,
             }}
