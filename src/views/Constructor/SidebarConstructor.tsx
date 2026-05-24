@@ -24,9 +24,12 @@ const nodeStyle = {
 
 interface Props {
   onAddEntity: () => void;
+  onAddNote: () => void;
+  onAddSection: () => void;
+  onAddText: () => void;
 }
 
-export function SidebarConstructor({ onAddEntity }: Props) {
+export function SidebarConstructor({ onAddEntity, onAddNote, onAddSection, onAddText }: Props) {
   return (
     <aside
       style={{
@@ -109,17 +112,23 @@ export function SidebarConstructor({ onAddEntity }: Props) {
         >
           <Button
             block
+            title="Adicionar Texto"
             style={{ height: 60 }}
+            onClick={onAddText}
             icon={<FontSizeOutlined style={{ fontSize: 20 }} />}
           />
           <Button
             block
+            title="Adicionar Seção"
             style={{ height: 60 }}
+            onClick={onAddSection}
             icon={<BorderOutlined style={{ fontSize: 20 }} />}
           />
           <Button
             block
+            title="Adicionar Nota"
             style={{ height: 60 }}
+            onClick={onAddNote}
             icon={<FileOutlined style={{ fontSize: 20 }} />}
           />
         </div>

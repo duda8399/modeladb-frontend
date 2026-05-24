@@ -16,6 +16,9 @@ import { Layout, message } from "antd";
 import { Navbar } from "../../components/LayoutComponents/Navbar";
 import { EditorToolbar } from "./EditorToolbar";
 import EntityNode from "../../components/ConstructorComponents/EntityNode";
+import NoteNode from "../../components/ConstructorComponents/NoteNode";
+import SectionNode from "../../components/ConstructorComponents/SectionNode";
+import TextNode from "../../components/ConstructorComponents/TextNode";
 import RelationModal from "../../components/ConstructorComponents/RelationModal";
 import RemoveEdge from "../../components/ConstructorComponents/RemoverEdge";
 import type { CustomEdge, CustomNode, RemoveEdgeData } from "../../types/diagramER";
@@ -83,11 +86,26 @@ const ConstructorPage: React.FC = () => {
     (props: any) => <EntityNode {...props} onBeforeDelete={captureHistory} />,
     [captureHistory],
   );
+  const NoteNodeWithHistory = useCallback(
+    (props: any) => <NoteNode {...props} onBeforeDelete={captureHistory} />,
+    [captureHistory],
+  );
+  const SectionNodeWithHistory = useCallback(
+    (props: any) => <SectionNode {...props} onBeforeDelete={captureHistory} />,
+    [captureHistory],
+  );
+  const TextNodeWithHistory = useCallback(
+    (props: any) => <TextNode {...props} onBeforeDelete={captureHistory} />,
+    [captureHistory],
+  );
   const nodeTypes = useMemo(
     () => ({
       entityNode: EntityNodeWithHistory,
+      noteNode: NoteNodeWithHistory,
+      sectionNode: SectionNodeWithHistory,
+      textNode: TextNodeWithHistory,
     }),
-    [EntityNodeWithHistory],
+    [EntityNodeWithHistory, NoteNodeWithHistory, SectionNodeWithHistory, TextNodeWithHistory],
   );
 
   const applySnapshot = useCallback(
@@ -307,6 +325,46 @@ const ConstructorPage: React.FC = () => {
     setOpenRelationModal(false);
   };
 
+  const addTextNode = useCallback(() => {
+    captureHistory();
+
+    const newNode: CustomNode = {
+      id: crypto.randomUUID(),
+      type: "textNode",
+      position: { x: 300, y: 200 },
+      data: { text: "" },
+    };
+
+    setNodes((nds) => [...nds, newNode]);
+  }, [captureHistory, setNodes]);
+
+  const addSectionNode = useCallback(() => {
+    captureHistory();
+
+    const newNode: CustomNode = {
+      id: crypto.randomUUID(),
+      type: "sectionNode",
+      position: { x: 200, y: 150 },
+      style: { width: 300, height: 200, zIndex: -1 },
+      data: { label: "Seção" },
+    };
+
+    setNodes((nds) => [...nds, newNode]);
+  }, [captureHistory, setNodes]);
+
+  const addNoteNode = useCallback(() => {
+    captureHistory();
+
+    const newNode: CustomNode = {
+      id: crypto.randomUUID(),
+      type: "noteNode",
+      position: { x: 300, y: 200 },
+      data: { text: "" },
+    };
+
+    setNodes((nds) => [...nds, newNode]);
+  }, [captureHistory, setNodes]);
+
   const addEntityNode = useCallback(() => {
     captureHistory();
 
@@ -405,7 +463,7 @@ const ConstructorPage: React.FC = () => {
           overflow: "hidden",
         }}
       >
-        <SidebarConstructor onAddEntity={addEntityNode} />
+        <SidebarConstructor onAddEntity={addEntityNode} onAddNote={addNoteNode} onAddSection={addSectionNode} onAddText={addTextNode} />
 
         <div style={{ flex: 1 }}>
           <ReactFlow
