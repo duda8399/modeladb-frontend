@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Typography } from "antd";
 import { AppLayout } from "../../components/LayoutComponents/AppLayout";
 import { api } from "../../services/api";
+import { getToken } from "../../utils/auth";
 
 const { Title } = Typography;
 
@@ -20,7 +21,13 @@ const SharedDocumentsPage: React.FC = () => {
 
   async function loadRecent() {
     try {
-      const { data } = await api.get("/diagram/recent");
+      const token = getToken();
+
+      const { data } = await api.get("/diagram/recent", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
       setRecent(data);
     } catch (e) {
       console.log(e);

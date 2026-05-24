@@ -1,4 +1,9 @@
-import { ApartmentOutlined, DeleteOutlined, ShareAltOutlined } from "@ant-design/icons";
+import {
+  ApartmentOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  ShareAltOutlined,
+} from "@ant-design/icons";
 import { Button, Card, Popconfirm, message, theme, Typography } from "antd";
 import { useNavigate } from "react-router-dom";
 
@@ -10,7 +15,7 @@ interface DocumentCardData {
   updatedAt: string;
 }
 
-interface ProjectCardProps {
+interface DiagramCardProps {
   document: DocumentCardData;
   onClick?: () => void;
   onDelete?: (id: string) => void;
@@ -22,7 +27,7 @@ export function DiagramCard({
   onClick,
   onDelete,
   isDeleting = false,
-}: ProjectCardProps) {
+}: DiagramCardProps) {
   const navigate = useNavigate();
   const {
     token: { colorPrimary },
@@ -35,9 +40,7 @@ export function DiagramCard({
 
   const handleShare = async (e: React.MouseEvent<HTMLElement>) => {
     e.stopPropagation();
-
     const url = `${window.location.origin}/model/${document.id}`;
-
     try {
       if (navigator.share) {
         await navigator.share({
@@ -47,7 +50,6 @@ export function DiagramCard({
         });
         return;
       }
-
       await navigator.clipboard.writeText(url);
       message.success("Link do modelo copiado com sucesso.");
     } catch {
@@ -55,40 +57,33 @@ export function DiagramCard({
     }
   };
 
-  const formattedUpdatedAt = new Date(document.updatedAt).toLocaleString("pt-BR", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const formattedUpdatedAt = new Date(document.updatedAt).toLocaleString(
+    "pt-BR",
+    {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    },
+  );
 
   return (
     <Card
       hoverable
       onClick={handleClick}
-      style={{
-        width: "100%",
-        height: "100%",
-        borderRadius: 12,
-        background: "#F5F5F3",
-      }}
-      styles={{ body: { padding: 16 } }}
-    >
-      <div style={{ position: "relative" }}>
+      style={{ width: "100%", borderRadius: 12, background: "#F5F5F3" }}
+      extra={
         <div
-          style={{
-            position: "absolute",
-            top: 0,
-            right: 0,
-            display: "flex",
-            alignItems: "center",
-            gap: 4,
-            zIndex: 1,
-          }}
+          style={{ display: "flex", gap: 2 }}
+          onClick={(e) => e.stopPropagation()}
         >
-          <Button type="text" icon={<ShareAltOutlined />} onClick={handleShare} />
-
+          <Button
+            type="text"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={handleClick}
+          />
           <Popconfirm
             title="Excluir documento"
             description="Tem certeza que deseja excluir este documento?"
@@ -106,36 +101,59 @@ export function DiagramCard({
             <Button
               danger
               type="text"
+              size="small"
               loading={isDeleting}
               disabled={isDeleting}
               icon={<DeleteOutlined />}
               onClick={(e) => e.stopPropagation()}
             />
           </Popconfirm>
+          <Button
+            type="text"
+            size="small"
+            icon={<ShareAltOutlined />}
+            onClick={handleShare}
+          />
+        </div>
+      }
+      styles={{
+        header: { borderBottom: "none", paddingBottom: 0, paddingTop: 4,minHeight: "auto" },
+        body: { padding: "0px 24px 16px" },
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div
+          style={{
+            flexShrink: 0,
+            width: 40,
+            height: 40,
+            borderRadius: "50%",
+            background: "#E8EDEB",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 20,
+            color: colorPrimary,
+          }}
+        >
+          <ApartmentOutlined />
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 12, paddingRight: "clamp(48px, 10vw, 80px)" }}>
-          <div
+        <div>
+          <span style={{ color: colorPrimary, fontSize: 14, fontWeight: 600 }}>
+            {document.name}
+          </span>
+          <Text
+            type="secondary"
             style={{
-              width: "clamp(32px, 8vw, 48px)",
-              height: "clamp(32px, 8vw, 48px)",
-              borderRadius: 10,
+              fontSize: 12,
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              background: "#E8EDEB",
-              fontSize: "clamp(16px, 3vw, 24px)",
-              color: colorPrimary,
-              flexShrink: 0,
+              gap: 4,
             }}
           >
-            <ApartmentOutlined />
-          </div>
-
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontWeight: 600, color: colorPrimary }}>{document.name}</div>
-            <Text type="secondary">Atualizado em {formattedUpdatedAt}</Text>
-          </div>
+            Atualizado em {formattedUpdatedAt}
+          </Text>
         </div>
       </div>
     </Card>
