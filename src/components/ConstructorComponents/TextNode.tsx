@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { NodeResizer, useReactFlow } from "reactflow";
 import { DeleteOutlined } from "@ant-design/icons";
 
@@ -12,6 +12,7 @@ type TextNodeProps = {
     underline?: boolean;
     fontColor?: string;
     textAlign?: "left" | "center" | "right" | "justify";
+    textBgColor?: string;
   };
   selected: boolean;
   id: string;
@@ -31,6 +32,17 @@ function toHtml(text: string): string {
 const TextNode = ({ data, selected, id, onBeforeDelete }: TextNodeProps) => {
   const { setNodes } = useReactFlow();
   const editableRef = useRef<HTMLDivElement>(null);
+  const [isFocused, setIsFocused] = useState(false);
+  const isActive = selected || isFocused;
+
+  const handleFocus = useCallback(() => {
+    setIsFocused(true);
+    setNodes((nds) => nds.map((n) => ({ ...n, selected: n.id === id })));
+  }, [id, setNodes]);
+
+  const handleBlur = useCallback(() => {
+    setIsFocused(false);
+  }, []);
 
   useEffect(() => {
     const el = editableRef.current;
@@ -67,14 +79,14 @@ const TextNode = ({ data, selected, id, onBeforeDelete }: TextNodeProps) => {
         flexDirection: "column",
         border: "none",
         borderRadius: 6,
-        background: "transparent",
+        background: data.textBgColor || "transparent",
         overflow: "hidden",
       }}
     >
-      <NodeResizer minWidth={120} minHeight={70} isVisible={selected} />
+      <NodeResizer minWidth={120} minHeight={70} isVisible={isActive} />
 
       <div style={{ position: "relative", flex: 1 }}>
-        {selected && (
+        {isActive && (
           <DeleteOutlined
             onClick={handleDelete}
             className="nodrag nopan"
@@ -112,6 +124,8 @@ const TextNode = ({ data, selected, id, onBeforeDelete }: TextNodeProps) => {
           contentEditable
           suppressContentEditableWarning
           onInput={handleInput}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
           style={{
             width: "100%",
             height: "100%",

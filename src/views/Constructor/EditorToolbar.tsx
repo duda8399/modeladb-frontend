@@ -5,6 +5,7 @@ import {
   AlignRightOutlined,
   BgColorsOutlined,
   BoldOutlined,
+  CloseCircleOutlined,
   FontColorsOutlined,
   ItalicOutlined,
   LinkOutlined,
@@ -12,6 +13,8 @@ import {
 } from "@ant-design/icons";
 import { SlActionRedo, SlActionUndo } from "react-icons/sl";
 import { MdFormatAlignJustify } from "react-icons/md";
+import { startTrackingSelection, restoreSelection } from "../../utils/selectionUtils";
+import { useEffect, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { CustomEdge, CustomNode } from "../../types/diagramER";
 import { ExportButton } from "../../components/ConstructorComponents/ExportButton";
@@ -104,11 +107,22 @@ export function EditorToolbar({
   bgColor,
   onBgColorChange,
 }: EditorToolbarProps) {
+  useEffect(() => startTrackingSelection(), []);
+
   const selectedTextNodes = nodes.filter(
     (n) => n.selected && (n.type === "textNode" || n.type === "noteNode"),
   );
   const isTextLike = selectedTextNodes.length > 0;
   const firstData = isTextLike ? (selectedTextNodes[0].data as Record<string, unknown>) : {};
+  const selectedNodeId = selectedTextNodes[0]?.id ?? null;
+
+  const [activeFont, setActiveFont] = useState<string | undefined>(undefined);
+  const [activeFontSize, setActiveFontSize] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    setActiveFont(undefined);
+    setActiveFontSize(undefined);
+  }, [selectedNodeId]);
 
   const updateTextNodes = (patch: Record<string, unknown>) => {
     setNodes((nds) =>
@@ -120,13 +134,14 @@ export function EditorToolbar({
     );
   };
 
-  const currentFont = (firstData?.fontFamily as string) ?? "Inter";
-  const currentSize = (firstData?.fontSize as number) ?? 14;
+  const currentFont = activeFont ?? ((firstData?.fontFamily as string) ?? "Inter");
+  const currentSize = activeFontSize ?? ((firstData?.fontSize as number) ?? 14);
   const isBold = !!(firstData?.bold);
   const isItalic = !!(firstData?.italic);
   const isUnderline = !!(firstData?.underline);
   const currentFontColor = (firstData?.fontColor as string) ?? "#000000";
   const currentAlign = (firstData?.textAlign as string) ?? "left";
+  const currentTextBgColor = (firstData?.textBgColor as string) ?? "";
 
   return (
     <div
@@ -145,7 +160,15 @@ export function EditorToolbar({
           value={isTextLike ? currentFont : undefined}
           disabled={!isTextLike}
           style={{ width: 150 }}
-          onChange={(val) => updateTextNodes({ fontFamily: val })}
+          onChange={(val) => {
+            setActiveFont(val);
+            if (restoreSelection()) {
+              document.execCommand("fontName", false, val);
+              setTimeout(() => restoreSelection(), 0);
+            } else {
+              updateTextNodes({ fontFamily: val });
+            }
+          }}
           options={fontGroups.map((group) => ({
             label: group.label,
             options: group.options.map((font) => ({
@@ -160,7 +183,35 @@ export function EditorToolbar({
           disabled={!isTextLike}
           style={{ width: 70 }}
           options={sizeOptions}
-          onChange={(val) => updateTextNodes({ fontSize: val })}
+          onChange={(val) => {
+            setActiveFontSize(val);
+            if (restoreSelection()) {
+              document.execCommand("fontSize", false, "7");
+              const activeEl = document.activeElement;
+              const spans: HTMLElement[] = [];
+              activeEl?.querySelectorAll('font[size="7"]').forEach((fontEl) => {
+                const span = document.createElement("span");
+                span.style.fontSize = `${val}px`;
+                span.innerHTML = (fontEl as HTMLElement).innerHTML;
+                fontEl.parentNode?.replaceChild(span, fontEl);
+                spans.push(span);
+              });
+              if (spans.length > 0) {
+                const sel = window.getSelection();
+                if (sel) {
+                  const range = document.createRange();
+                  range.setStartBefore(spans[0]);
+                  range.setEndAfter(spans[spans.length - 1]);
+                  sel.removeAllRanges();
+                  sel.addRange(range);
+                }
+              }
+              activeEl?.dispatchEvent(new Event("input", { bubbles: true }));
+              setTimeout(() => restoreSelection(), 0);
+            } else {
+              updateTextNodes({ fontSize: val });
+            }
+          }}
         />
 
         <Button
@@ -212,9 +263,14 @@ export function EditorToolbar({
         <ColorPicker
           value={currentFontColor}
           disabled={!isTextLike}
-          onChangeComplete={(color) =>
-            updateTextNodes({ fontColor: color.toHexString() })
-          }
+          onChangeComplete={(color) => {
+            if (restoreSelection()) {
+              document.execCommand("foreColor", false, color.toHexString());
+              setTimeout(() => restoreSelection(), 0);
+            } else {
+              updateTextNodes({ fontColor: color.toHexString() });
+            }
+          }}
         >
           <Button
             title="Cor da Fonte"
@@ -223,6 +279,15 @@ export function EditorToolbar({
             style={isTextLike ? { color: currentFontColor } : {}}
           />
         </ColorPicker>
+
+        {isTextLike && currentTextBgColor && (
+          <Button
+            title="Remover cor de fundo"
+            icon={<CloseCircleOutlined />}
+            size="small"
+            onClick={() => updateTextNodes({ textBgColor: "" })}
+          />
+        )}
 
         <Button
           title="Alinhar à esquerda"

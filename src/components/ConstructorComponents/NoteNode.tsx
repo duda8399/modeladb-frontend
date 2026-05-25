@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { NodeResizer, useReactFlow } from "reactflow";
 import { DeleteOutlined } from "@ant-design/icons";
 
@@ -12,6 +12,7 @@ type NoteNodeProps = {
     underline?: boolean;
     fontColor?: string;
     textAlign?: "left" | "center" | "right" | "justify";
+    textBgColor?: string;
   };
   selected: boolean;
   id: string;
@@ -31,6 +32,17 @@ function toHtml(text: string): string {
 const NoteNode = ({ data, selected, id, onBeforeDelete }: NoteNodeProps) => {
   const { setNodes } = useReactFlow();
   const editableRef = useRef<HTMLDivElement>(null);
+  const [isFocused, setIsFocused] = useState(false);
+  const isActive = selected || isFocused;
+
+  const handleFocus = useCallback(() => {
+    setIsFocused(true);
+    setNodes((nds) => nds.map((n) => ({ ...n, selected: n.id === id })));
+  }, [id, setNodes]);
+
+  const handleBlur = useCallback(() => {
+    setIsFocused(false);
+  }, []);
 
   useEffect(() => {
     const el = editableRef.current;
@@ -61,8 +73,8 @@ const NoteNode = ({ data, selected, id, onBeforeDelete }: NoteNodeProps) => {
   return (
     <div
       style={{
-        background: "#fef9c3",
-        border: selected ? "1.5px dashed #facc15" : "1px solid #fde68a",
+        background: data.textBgColor || "#fef9c3",
+        border: isActive ? "1.5px dashed #facc15" : "1px solid #fde68a",
         borderRadius: 8,
         padding: 8,
         minWidth: 150,
@@ -72,8 +84,8 @@ const NoteNode = ({ data, selected, id, onBeforeDelete }: NoteNodeProps) => {
         position: "relative",
       }}
     >
-      <NodeResizer minWidth={150} minHeight={80} isVisible={selected} />
-      {selected && (
+      <NodeResizer minWidth={150} minHeight={80} isVisible={isActive} />
+      {isActive && (
         <DeleteOutlined
           onClick={handleDelete}
           className="nodrag nopan"
@@ -111,6 +123,8 @@ const NoteNode = ({ data, selected, id, onBeforeDelete }: NoteNodeProps) => {
         contentEditable
         suppressContentEditableWarning
         onInput={handleInput}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
         style={{
           width: "100%",
           minHeight: 64,
@@ -118,7 +132,7 @@ const NoteNode = ({ data, selected, id, onBeforeDelete }: NoteNodeProps) => {
           background: "transparent",
           outline: "none",
           boxSizing: "border-box",
-          paddingRight: selected ? 20 : 0,
+          paddingRight: isActive ? 20 : 0,
           fontFamily: data.fontFamily ?? "inherit",
           fontSize: data.fontSize ?? 13,
           fontWeight: data.bold ? "bold" : "normal",
