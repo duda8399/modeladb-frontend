@@ -11,7 +11,7 @@ import {
   message,
   Divider,
 } from "antd";
-import { UserOutlined, UploadOutlined } from "@ant-design/icons";
+import { UserOutlined, UploadOutlined, DeleteOutlined } from "@ant-design/icons";
 import { AppLayout } from "../../components/LayoutComponents/AppLayout";
 import { api } from "../../services/api";
 
@@ -64,6 +64,8 @@ const ProfilePage: React.FC = () => {
 
       if (avatarFile) {
         formData.append("avatar", avatarFile);
+      } else if (!avatarPreview) {
+        formData.append("avatarUrl", "");
       }
 
       await api.put(`/user/${id}`, formData, {
@@ -99,21 +101,32 @@ const ProfilePage: React.FC = () => {
               gap: 16,
             }}
           >
-            <Avatar size={36} src={avatarPreview} icon={<UserOutlined />} />
+            <Avatar size={250} src={avatarPreview} icon={<UserOutlined />} />
 
             <Upload
               showUploadList={false}
               beforeUpload={(file) => {
                 setAvatarFile(file);
-
-                const preview = URL.createObjectURL(file);
-                setAvatarPreview(preview);
-
+                setAvatarPreview(URL.createObjectURL(file));
                 return false;
               }}
             >
-              <Button icon={<UploadOutlined />}>Alterar foto</Button>
+              <Button icon={<UploadOutlined />} style={{ width: 140, height: "31.7px", padding: "0 16px" }}>Alterar foto</Button>
             </Upload>
+
+            {avatarPreview && (
+              <Button
+                danger
+                icon={<DeleteOutlined />}
+                style={{ width: 140, height: 30, padding: "0 16px" }}
+                onClick={() => {
+                  setAvatarPreview(undefined);
+                  setAvatarFile(null);
+                }}
+              >
+                Remover foto
+              </Button>
+            )}
           </div>
         </Col>
 
