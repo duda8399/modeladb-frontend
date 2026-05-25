@@ -1,4 +1,4 @@
-import { Button, Divider, Select, Space } from "antd";
+import { Button, ColorPicker, Divider, Select, Space } from "antd";
 import {
   AlignCenterOutlined,
   BgColorsOutlined,
@@ -44,6 +44,9 @@ interface EditorToolbarProps {
   canUndo: boolean;
   canRedo: boolean;
   onBeforeImportReplace: () => void;
+  bgColorActive: boolean;
+  bgColor: string;
+  onBgColorChange: (color: string) => void;
 }
 
 export function EditorToolbar({
@@ -60,6 +63,9 @@ export function EditorToolbar({
   canUndo,
   canRedo,
   onBeforeImportReplace,
+  bgColorActive,
+  bgColor,
+  onBgColorChange,
 }: EditorToolbarProps) {
   return (
     <div
@@ -87,7 +93,17 @@ export function EditorToolbar({
         <Button title="Sublinhado" icon={<UnderlineOutlined />} />
         <Button title="Cor da Fonte" icon={<FontColorsOutlined />} />
         <Button title="Alinhar ao Centro" icon={<AlignCenterOutlined />} />
-        <Button title="Adicionar cor de fundo" icon={<BgColorsOutlined />} />
+        <ColorPicker
+          value={bgColor}
+          onChangeComplete={(color) => onBgColorChange(color.toHexString())}
+        >
+          <Button
+            title="Adicionar cor de fundo"
+            icon={<BgColorsOutlined />}
+            type={bgColorActive ? "primary" : "default"}
+            style={bgColorActive ? { borderColor: bgColor, color: bgColor } : {}}
+          />
+        </ColorPicker>
 
         <Divider type="vertical" />
 

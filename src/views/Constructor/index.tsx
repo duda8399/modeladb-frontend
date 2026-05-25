@@ -50,6 +50,8 @@ const ConstructorPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
+  const [bgColorMode, setBgColorMode] = useState(false);
+  const [currentBgColor, setCurrentBgColor] = useState("#63b3ed");
   const pastHistoryRef = useRef<DiagramSnapshot[]>([]);
   const futureHistoryRef = useRef<DiagramSnapshot[]>([]);
   const currentSnapshotRef = useRef<DiagramSnapshot>({
@@ -325,6 +327,36 @@ const ConstructorPage: React.FC = () => {
     setOpenRelationModal(false);
   };
 
+  const handleBgColorChange = useCallback((color: string) => {
+    setCurrentBgColor(color);
+    setBgColorMode(true);
+  }, []);
+
+  const handleNodeClick = useCallback(
+    (_: React.MouseEvent, node: CustomNode) => {
+      if (!bgColorMode || node.type !== "sectionNode") return;
+      captureHistory();
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === node.id ? { ...n, data: { ...n.data, bgColor: currentBgColor } } : n,
+        ),
+      );
+    },
+    [bgColorMode, currentBgColor, captureHistory, setNodes],
+  );
+
+  const handlePaneClick = useCallback(() => {
+    setBgColorMode(false);
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setBgColorMode(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const addTextNode = useCallback(() => {
     captureHistory();
 
@@ -454,6 +486,9 @@ const ConstructorPage: React.FC = () => {
         canUndo={canUndo}
         canRedo={canRedo}
         onBeforeImportReplace={captureHistory}
+        bgColorActive={bgColorMode}
+        bgColor={currentBgColor}
+        onBgColorChange={handleBgColorChange}
       />
 
       <div
@@ -465,7 +500,14 @@ const ConstructorPage: React.FC = () => {
       >
         <SidebarConstructor onAddEntity={addEntityNode} onAddNote={addNoteNode} onAddSection={addSectionNode} onAddText={addTextNode} />
 
-        <div style={{ flex: 1 }}>
+        <div
+          style={{
+            flex: 1,
+            cursor: bgColorMode
+              ? "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23333' d='M16.56 8.94L7.62 0 6.21 1.41l2.38 2.38-5.15 5.15a1.49 1.49 0 0 0 0 2.12l5.5 5.5c.29.29.68.44 1.06.44s.77-.15 1.06-.44l5.5-5.5c.59-.58.59-1.53 0-2.12zM5.21 10L10 5.21 14.79 10H5.21zM19 11.5s-2 2.17-2 3.5c0 1.1.9 2 2 2s2-.9 2-2c0-1.33-2-3.5-2-3.5z'/%3E%3C/svg%3E\") 4 20, auto"
+              : undefined,
+          }}
+        >
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -474,6 +516,8 @@ const ConstructorPage: React.FC = () => {
             onEdgesChange={onEdgesChange}
             onNodeDragStart={captureHistory}
             onConnect={onConnect}
+            onNodeClick={handleNodeClick}
+            onPaneClick={handlePaneClick}
             fitView
             defaultEdgeOptions={{
               style: { strokeWidth: 2 },
