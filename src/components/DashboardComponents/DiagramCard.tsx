@@ -1,5 +1,6 @@
 import {
   ApartmentOutlined,
+  ClockCircleOutlined,
   DeleteOutlined,
   EditOutlined,
   ShareAltOutlined,
@@ -13,6 +14,7 @@ interface DocumentCardData {
   id: string;
   name: string;
   updatedAt: string;
+  thumbnail?: string;
 }
 
 interface DiagramCardProps {
@@ -43,11 +45,7 @@ export function DiagramCard({
     const url = `${window.location.origin}/model/${document.id}`;
     try {
       if (navigator.share) {
-        await navigator.share({
-          title: document.name,
-          text: `Confira o modelo ${document.name}`,
-          url,
-        });
+        await navigator.share({ title: document.name, url });
         return;
       }
       await navigator.clipboard.writeText(url);
@@ -72,10 +70,54 @@ export function DiagramCard({
     <Card
       hoverable
       onClick={handleClick}
-      style={{ width: "100%", borderRadius: 12, background: "#F5F5F3" }}
-      extra={
+      style={{
+        width: "100%",
+        borderRadius: 12,
+        overflow: "hidden",
+        background: "#fff",
+      }}
+      styles={{ body: { padding: 0 } }}
+    >
+      <div
+        style={{
+          padding: "12px 12px 8px",
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 8,
+        }}
+      >
         <div
-          style={{ display: "flex", gap: 2 }}
+          style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}
+        >
+          <div
+            style={{
+              flexShrink: 0,
+              width: 28,
+              height: 28,
+              borderRadius: 6,
+              background: "#FFF0E8",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: colorPrimary,
+              fontSize: 14,
+            }}
+          >
+            <ApartmentOutlined />
+          </div>
+          <Text
+            strong
+            ellipsis
+            style={{ fontSize: 13, color: "#1a1a1a", lineHeight: "1.3" }}
+            title={document.name}
+          >
+            {document.name}
+          </Text>
+        </div>
+
+        <div
+          style={{ display: "flex", gap: 2, flexShrink: 0 }}
           onClick={(e) => e.stopPropagation()}
         >
           <Button
@@ -115,46 +157,45 @@ export function DiagramCard({
             onClick={handleShare}
           />
         </div>
-      }
-      styles={{
-        header: { borderBottom: "none", paddingBottom: 0, paddingTop: 4,minHeight: "auto" },
-        body: { padding: "0px 24px 16px" },
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div
-          style={{
-            flexShrink: 0,
-            width: 40,
-            height: 40,
-            borderRadius: "50%",
-            background: "#E8EDEB",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 20,
-            color: colorPrimary,
-          }}
-        >
-          <ApartmentOutlined />
-        </div>
+      </div>
 
-        <div>
-          <span style={{ color: colorPrimary, fontSize: 14, fontWeight: 600 }}>
-            {document.name}
-          </span>
-          <Text
-            type="secondary"
-            style={{
-              fontSize: 12,
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-            }}
-          >
-            Atualizado em {formattedUpdatedAt}
-          </Text>
-        </div>
+      <div
+        style={{
+          margin: "0 12px",
+          height: 160,
+          borderRadius: 8,
+          background: "#F5F5F3",
+          overflow: "hidden",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          border: "1px solid #EBEBEB",
+        }}
+      >
+        {document.thumbnail ? (
+          <img
+            src={document.thumbnail}
+            alt={document.name}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        ) : (
+          <ApartmentOutlined style={{ fontSize: 40, color: "#D0D0D0" }} />
+        )}
+      </div>
+
+      <div
+        style={{
+          padding: "8px 16px",
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+        }}
+      >
+        <ClockCircleOutlined style={{ fontSize: 12, color: "#555" }} />
+        <Text style={{ fontSize: 12, color: "#555" }}>Atualizado em:</Text>
+        <Text type="secondary" style={{ fontSize: 11, marginLeft: "auto" }}>
+          {formattedUpdatedAt}
+        </Text>
       </div>
     </Card>
   );

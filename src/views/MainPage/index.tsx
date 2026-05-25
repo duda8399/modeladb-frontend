@@ -16,6 +16,7 @@ interface Project {
   id: string;
   name: string;
   updatedAt: string;
+  thumbnail?: string;
 }
 
 const MainPage: React.FC = () => {

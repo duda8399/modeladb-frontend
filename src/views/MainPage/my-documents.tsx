@@ -23,6 +23,7 @@ interface Project {
   id: string;
   name: string;
   updatedAt: string;
+  thumbnail?: string;
 }
 
 const MyDocumentsPage: React.FC = () => {
@@ -43,7 +44,7 @@ const MyDocumentsPage: React.FC = () => {
       window.innerWidth >= 1200 ? 3 : window.innerWidth >= 768 ? 2 : 1;
     const rowsCanFit = Math.max(1, Math.floor(availableHeight / cardRowHeight));
 
-    return rowsCanFit * colsPerRow;
+    return Math.min(rowsCanFit * colsPerRow, 9);
   };
 
   useEffect(() => {

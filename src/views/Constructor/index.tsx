@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import html2canvas from "html2canvas";
 import "reactflow/dist/style.css";
 import {
   Background,
@@ -10,6 +11,9 @@ import {
   useNodesState,
   type Connection,
   type Edge,
+  getNodesBounds,
+  getViewportForBounds,
+  useReactFlow,
 } from "reactflow";
 import { SidebarConstructor } from "./SidebarConstructor";
 import { Layout, message } from "antd";
@@ -21,7 +25,11 @@ import SectionNode from "../../components/ConstructorComponents/SectionNode";
 import TextNode from "../../components/ConstructorComponents/TextNode";
 import RelationModal from "../../components/ConstructorComponents/RelationModal";
 import RemoveEdge from "../../components/ConstructorComponents/RemoverEdge";
-import type { CustomEdge, CustomNode, RemoveEdgeData } from "../../types/diagramER";
+import type {
+  CustomEdge,
+  CustomNode,
+  RemoveEdgeData,
+} from "../../types/diagramER";
 import { useParams } from "react-router-dom";
 import { api } from "../../services/api";
 
@@ -31,12 +39,13 @@ type DiagramSnapshot = {
   diagramName: string;
 };
 
-const cloneSnapshot = (snapshot: DiagramSnapshot): DiagramSnapshot => structuredClone(snapshot);
+const cloneSnapshot = (snapshot: DiagramSnapshot): DiagramSnapshot =>
+  structuredClone(snapshot);
 
 const ConstructorPage: React.FC = () => {
   const { id } = useParams();
   const [messageApi, contextHolder] = message.useMessage();
-
+  const { getNodes } = useReactFlow();
   const [nodes, setNodes, onNodesChange] = useNodesState<CustomNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<CustomEdge>([]);
   const [pendingConnection, setPendingConnection] = useState<Connection | null>(
@@ -52,6 +61,7 @@ const ConstructorPage: React.FC = () => {
   const [canRedo, setCanRedo] = useState(false);
   const [bgColorMode, setBgColorMode] = useState(false);
   const [currentBgColor, setCurrentBgColor] = useState("#63b3ed");
+  const reactFlowContainerRef = useRef<HTMLDivElement>(null);
   const pastHistoryRef = useRef<DiagramSnapshot[]>([]);
   const futureHistoryRef = useRef<DiagramSnapshot[]>([]);
   const currentSnapshotRef = useRef<DiagramSnapshot>({
@@ -107,7 +117,12 @@ const ConstructorPage: React.FC = () => {
       sectionNode: SectionNodeWithHistory,
       textNode: TextNodeWithHistory,
     }),
-    [EntityNodeWithHistory, NoteNodeWithHistory, SectionNodeWithHistory, TextNodeWithHistory],
+    [
+      EntityNodeWithHistory,
+      NoteNodeWithHistory,
+      SectionNodeWithHistory,
+      TextNodeWithHistory,
+    ],
   );
 
   const applySnapshot = useCallback(
@@ -154,7 +169,9 @@ const ConstructorPage: React.FC = () => {
 
         loadedEdges = loadedEdges.map((edge: any) => {
           if (!edge.data) {
-            const sourceNode = loadedNodes.find((n: any) => n.id === edge.source);
+            const sourceNode = loadedNodes.find(
+              (n: any) => n.id === edge.source,
+            );
             const sourceName = (sourceNode?.data as any)?.name || edge.source;
 
             return {
@@ -178,7 +195,9 @@ const ConstructorPage: React.FC = () => {
         syncHistoryAvailability();
       } catch (error: any) {
         const errorMessage = error?.response?.data?.message;
-        messageApi.error(errorMessage || "Nao foi possivel carregar o diagrama");
+        messageApi.error(
+          errorMessage || "Nao foi possivel carregar o diagrama",
+        );
       }
     };
 
@@ -338,7 +357,9 @@ const ConstructorPage: React.FC = () => {
       captureHistory();
       setNodes((nds) =>
         nds.map((n) =>
-          n.id === node.id ? { ...n, data: { ...n.data, bgColor: currentBgColor } } : n,
+          n.id === node.id
+            ? { ...n, data: { ...n.data, bgColor: currentBgColor } }
+            : n,
         ),
       );
     },
@@ -427,12 +448,65 @@ const ConstructorPage: React.FC = () => {
     [],
   );
 
+  const captureThumbnail = async (): Promise<string | undefined> => {
+    if (!reactFlowContainerRef.current) return undefined;
+
+    try {
+      const nodesBounds = getNodesBounds(getNodes());
+
+      getViewportForBounds(
+        nodesBounds,
+        nodesBounds.width + 200,
+        nodesBounds.height + 200,
+        0.5,
+        2,
+        0.1,
+      );
+
+      const flow = reactFlowContainerRef.current.querySelector(
+        ".react-flow__viewport",
+      ) as HTMLElement;
+
+      if (!flow) return undefined;
+
+      const canvas = await html2canvas(flow, {
+        backgroundColor: "#fff",
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        width: nodesBounds.width + 200,
+        height: nodesBounds.height + 200,
+        x: nodesBounds.x - 100,
+        y: nodesBounds.y - 100,
+        windowWidth: nodesBounds.width + 200,
+        windowHeight: nodesBounds.height + 200,
+      });
+
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, "image/jpeg", 0.4),
+      );
+
+      if (!blob) return undefined;
+
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      return undefined;
+    }
+  };
+
   const handleSave = useCallback(async () => {
     if (!id) return;
 
     setSaving(true);
 
     try {
+      const thumbnail = await captureThumbnail();
+
       await api.put(`/diagram/${id}`, {
         name: diagramName,
         nodes: nodes.map((node) => ({
@@ -451,6 +525,7 @@ const ConstructorPage: React.FC = () => {
           target: edge.target,
           data: edge.data,
         })),
+        ...(thumbnail ? { thumbnail } : {}),
       });
 
       messageApi.success("Diagrama salvo com sucesso");
@@ -498,14 +573,18 @@ const ConstructorPage: React.FC = () => {
           overflow: "hidden",
         }}
       >
-        <SidebarConstructor onAddEntity={addEntityNode} onAddNote={addNoteNode} onAddSection={addSectionNode} onAddText={addTextNode} />
+        <SidebarConstructor
+          onAddEntity={addEntityNode}
+          onAddNote={addNoteNode}
+          onAddSection={addSectionNode}
+          onAddText={addTextNode}
+        />
 
         <div
+          ref={reactFlowContainerRef}
           style={{
             flex: 1,
-            cursor: bgColorMode
-              ? "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23333' d='M16.56 8.94L7.62 0 6.21 1.41l2.38 2.38-5.15 5.15a1.49 1.49 0 0 0 0 2.12l5.5 5.5c.29.29.68.44 1.06.44s.77-.15 1.06-.44l5.5-5.5c.59-.58.59-1.53 0-2.12zM5.21 10L10 5.21 14.79 10H5.21zM19 11.5s-2 2.17-2 3.5c0 1.1.9 2 2 2s2-.9 2-2c0-1.33-2-3.5-2-3.5z'/%3E%3C/svg%3E\") 4 20, auto"
-              : undefined,
+            cursor: bgColorMode ? "crosshair" : undefined,
           }}
         >
           <ReactFlow
