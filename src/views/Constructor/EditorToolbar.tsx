@@ -14,20 +14,54 @@ import type { CustomEdge, CustomNode } from "../../types/diagramER";
 import { ExportButton } from "../../components/ConstructorComponents/ExportButton";
 import { ImportButton } from "../../components/ConstructorComponents/ImportButton";
 
-const fontOptions = [
-  { value: "Inter", label: "Inter" },
-  { value: "Arial", label: "Arial" },
-  { value: "Helvetica", label: "Helvetica" },
-  { value: "Times New Roman", label: "Times New Roman" },
+const fontGroups = [
+  {
+    label: "Sans-serif",
+    options: [
+      "Inter",
+      "Roboto",
+      "Open Sans",
+      "Lato",
+      "Montserrat",
+      "Poppins",
+      "Raleway",
+      "Nunito",
+      "Arial",
+      "Helvetica",
+      "Verdana",
+      "Trebuchet MS",
+    ],
+  },
+  {
+    label: "Serif",
+    options: ["Times New Roman", "Georgia", "Playfair Display", "Merriweather"],
+  },
+  {
+    label: "Monospace",
+    options: ["Source Code Pro", "Courier New"],
+  },
 ];
 
 const sizeOptions = [
+  { value: 8, label: "8" },
+  { value: 9, label: "9" },
   { value: 10, label: "10" },
+  { value: 11, label: "11" },
   { value: 12, label: "12" },
+  { value: 13, label: "13" },
   { value: 14, label: "14" },
+  { value: 15, label: "15" },
   { value: 16, label: "16" },
   { value: 18, label: "18" },
+  { value: 20, label: "20" },
+  { value: 22, label: "22" },
   { value: 24, label: "24" },
+  { value: 28, label: "28" },
+  { value: 32, label: "32" },
+  { value: 36, label: "36" },
+  { value: 48, label: "48" },
+  { value: 64, label: "64" },
+  { value: 72, label: "72" },
 ];
 
 interface EditorToolbarProps {
@@ -47,6 +81,8 @@ interface EditorToolbarProps {
   bgColorActive: boolean;
   bgColor: string;
   onBgColorChange: (color: string) => void;
+  fontColor: string;
+  onFontColorChange: (color: string) => void;
 }
 
 export function EditorToolbar({
@@ -66,6 +102,8 @@ export function EditorToolbar({
   bgColorActive,
   bgColor,
   onBgColorChange,
+  fontColor,
+  onFontColorChange,
 }: EditorToolbarProps) {
   return (
     <div
@@ -82,8 +120,14 @@ export function EditorToolbar({
       <Space size={8}>
         <Select
           defaultValue="Inter"
-          style={{ width: 140 }}
-          options={fontOptions}
+          style={{ width: 150 }}
+          options={fontGroups.map((group) => ({
+            label: group.label,
+            options: group.options.map((font) => ({
+              value: font,
+              label: <span style={{ fontFamily: font }}>{font}</span>,
+            })),
+          }))}
         />
 
         <Select defaultValue={14} style={{ width: 70 }} options={sizeOptions} />
@@ -91,7 +135,16 @@ export function EditorToolbar({
         <Button title="Negrito" icon={<BoldOutlined />} />
         <Button title="Itálico" icon={<ItalicOutlined />} />
         <Button title="Sublinhado" icon={<UnderlineOutlined />} />
-        <Button title="Cor da Fonte" icon={<FontColorsOutlined />} />
+        <ColorPicker
+          value={fontColor}
+          onChangeComplete={(color) => onFontColorChange(color.toHexString())}
+        >
+          <Button
+            title="Cor da Fonte"
+            icon={<FontColorsOutlined />}
+            style={{ color: fontColor }}
+          />
+        </ColorPicker>
         <Button title="Alinhar ao Centro" icon={<AlignCenterOutlined />} />
         <ColorPicker
           value={bgColor}
