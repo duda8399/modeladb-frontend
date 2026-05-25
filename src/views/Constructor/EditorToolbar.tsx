@@ -1,6 +1,8 @@
 import { Button, ColorPicker, Divider, Select, Space } from "antd";
 import {
   AlignCenterOutlined,
+  AlignLeftOutlined,
+  AlignRightOutlined,
   BgColorsOutlined,
   BoldOutlined,
   FontColorsOutlined,
@@ -9,6 +11,7 @@ import {
   UnderlineOutlined,
 } from "@ant-design/icons";
 import { SlActionRedo, SlActionUndo } from "react-icons/sl";
+import { MdFormatAlignJustify } from "react-icons/md";
 import type { Dispatch, SetStateAction } from "react";
 import type { CustomEdge, CustomNode } from "../../types/diagramER";
 import { ExportButton } from "../../components/ConstructorComponents/ExportButton";
@@ -81,8 +84,6 @@ interface EditorToolbarProps {
   bgColorActive: boolean;
   bgColor: string;
   onBgColorChange: (color: string) => void;
-  fontColor: string;
-  onFontColorChange: (color: string) => void;
 }
 
 export function EditorToolbar({
@@ -102,9 +103,31 @@ export function EditorToolbar({
   bgColorActive,
   bgColor,
   onBgColorChange,
-  fontColor,
-  onFontColorChange,
 }: EditorToolbarProps) {
+  const selectedTextNodes = nodes.filter(
+    (n) => n.selected && (n.type === "textNode" || n.type === "noteNode"),
+  );
+  const isTextLike = selectedTextNodes.length > 0;
+  const firstData = isTextLike ? (selectedTextNodes[0].data as Record<string, unknown>) : {};
+
+  const updateTextNodes = (patch: Record<string, unknown>) => {
+    setNodes((nds) =>
+      nds.map((n) =>
+        n.selected && (n.type === "textNode" || n.type === "noteNode")
+          ? { ...n, data: { ...n.data, ...patch } }
+          : n,
+      ),
+    );
+  };
+
+  const currentFont = (firstData?.fontFamily as string) ?? "Inter";
+  const currentSize = (firstData?.fontSize as number) ?? 14;
+  const isBold = !!(firstData?.bold);
+  const isItalic = !!(firstData?.italic);
+  const isUnderline = !!(firstData?.underline);
+  const currentFontColor = (firstData?.fontColor as string) ?? "#000000";
+  const currentAlign = (firstData?.textAlign as string) ?? "left";
+
   return (
     <div
       style={{
@@ -119,8 +142,10 @@ export function EditorToolbar({
     >
       <Space size={8}>
         <Select
-          defaultValue="Inter"
+          value={isTextLike ? currentFont : undefined}
+          disabled={!isTextLike}
           style={{ width: 150 }}
+          onChange={(val) => updateTextNodes({ fontFamily: val })}
           options={fontGroups.map((group) => ({
             label: group.label,
             options: group.options.map((font) => ({
@@ -130,22 +155,104 @@ export function EditorToolbar({
           }))}
         />
 
-        <Select defaultValue={14} style={{ width: 70 }} options={sizeOptions} />
+        <Select
+          value={isTextLike ? currentSize : undefined}
+          disabled={!isTextLike}
+          style={{ width: 70 }}
+          options={sizeOptions}
+          onChange={(val) => updateTextNodes({ fontSize: val })}
+        />
 
-        <Button title="Negrito" icon={<BoldOutlined />} />
-        <Button title="Itálico" icon={<ItalicOutlined />} />
-        <Button title="Sublinhado" icon={<UnderlineOutlined />} />
+        <Button
+          title="Negrito"
+          icon={<BoldOutlined />}
+          disabled={!isTextLike}
+          type={isBold ? "primary" : "default"}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            const sel = window.getSelection();
+            if (sel && sel.toString().length > 0) {
+              document.execCommand("bold");
+            } else {
+              updateTextNodes({ bold: !isBold });
+            }
+          }}
+        />
+        <Button
+          title="Itálico"
+          icon={<ItalicOutlined />}
+          disabled={!isTextLike}
+          type={isItalic ? "primary" : "default"}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            const sel = window.getSelection();
+            if (sel && sel.toString().length > 0) {
+              document.execCommand("italic");
+            } else {
+              updateTextNodes({ italic: !isItalic });
+            }
+          }}
+        />
+        <Button
+          title="Sublinhado"
+          icon={<UnderlineOutlined />}
+          disabled={!isTextLike}
+          type={isUnderline ? "primary" : "default"}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            const sel = window.getSelection();
+            if (sel && sel.toString().length > 0) {
+              document.execCommand("underline");
+            } else {
+              updateTextNodes({ underline: !isUnderline });
+            }
+          }}
+        />
+
         <ColorPicker
-          value={fontColor}
-          onChangeComplete={(color) => onFontColorChange(color.toHexString())}
+          value={currentFontColor}
+          disabled={!isTextLike}
+          onChangeComplete={(color) =>
+            updateTextNodes({ fontColor: color.toHexString() })
+          }
         >
           <Button
             title="Cor da Fonte"
             icon={<FontColorsOutlined />}
-            style={{ color: fontColor }}
+            disabled={!isTextLike}
+            style={isTextLike ? { color: currentFontColor } : {}}
           />
         </ColorPicker>
-        <Button title="Alinhar ao Centro" icon={<AlignCenterOutlined />} />
+
+        <Button
+          title="Alinhar à esquerda"
+          icon={<AlignLeftOutlined />}
+          disabled={!isTextLike}
+          type={currentAlign === "left" ? "primary" : "default"}
+          onClick={() => updateTextNodes({ textAlign: "left" })}
+        />
+        <Button
+          title="Centralizar"
+          icon={<AlignCenterOutlined />}
+          disabled={!isTextLike}
+          type={currentAlign === "center" ? "primary" : "default"}
+          onClick={() => updateTextNodes({ textAlign: "center" })}
+        />
+        <Button
+          title="Alinhar à direita"
+          icon={<AlignRightOutlined />}
+          disabled={!isTextLike}
+          type={currentAlign === "right" ? "primary" : "default"}
+          onClick={() => updateTextNodes({ textAlign: "right" })}
+        />
+        <Button
+          title="Justificado"
+          icon={<MdFormatAlignJustify style={{ fontSize: 14 }} />}
+          disabled={!isTextLike}
+          type={currentAlign === "justify" ? "primary" : "default"}
+          onClick={() => updateTextNodes({ textAlign: "justify" })}
+        />
+
         <ColorPicker
           value={bgColor}
           onChangeComplete={(color) => onBgColorChange(color.toHexString())}

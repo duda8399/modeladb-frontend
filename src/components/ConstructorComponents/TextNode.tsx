@@ -1,32 +1,62 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { NodeResizer, useReactFlow } from "reactflow";
 import { DeleteOutlined } from "@ant-design/icons";
 
 type TextNodeProps = {
-  data: { text: string };
+  data: {
+    text: string;
+    fontFamily?: string;
+    fontSize?: number;
+    bold?: boolean;
+    italic?: boolean;
+    underline?: boolean;
+    fontColor?: string;
+    textAlign?: "left" | "center" | "right" | "justify";
+  };
   selected: boolean;
   id: string;
   onBeforeDelete?: () => void;
 };
 
+function toHtml(text: string): string {
+  if (!text) return "";
+  if (/<[a-z][\s\S]*>/i.test(text)) return text;
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\n/g, "<br>");
+}
+
 const TextNode = ({ data, selected, id, onBeforeDelete }: TextNodeProps) => {
   const { setNodes } = useReactFlow();
+  const editableRef = useRef<HTMLDivElement>(null);
 
-  const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      setNodes((nds) =>
-        nds.map((n) =>
-          n.id === id ? { ...n, data: { ...n.data, text: e.target.value } } : n,
-        ),
-      );
-    },
-    [id, setNodes],
-  );
+  useEffect(() => {
+    const el = editableRef.current;
+    if (!el) return;
+    const html = toHtml(data.text ?? "");
+    if (el.innerHTML !== html) {
+      el.innerHTML = html;
+    }
+  }, [data.text]);
+
+  const handleInput = useCallback(() => {
+    const el = editableRef.current;
+    if (!el) return;
+    setNodes((nds) =>
+      nds.map((n) =>
+        n.id === id ? { ...n, data: { ...n.data, text: el.innerHTML } } : n,
+      ),
+    );
+  }, [id, setNodes]);
 
   const handleDelete = useCallback(() => {
     onBeforeDelete?.();
     setNodes((nds) => nds.filter((n) => n.id !== id));
   }, [id, onBeforeDelete, setNodes]);
+
+  const isEmpty = !data.text || data.text === "" || data.text === "<br>";
 
   return (
     <div
@@ -43,12 +73,7 @@ const TextNode = ({ data, selected, id, onBeforeDelete }: TextNodeProps) => {
     >
       <NodeResizer minWidth={120} minHeight={70} isVisible={selected} />
 
-      <div
-        style={{
-          position: "relative",
-          flex: 1,
-        }}
-      >
+      <div style={{ position: "relative", flex: 1 }}>
         {selected && (
           <DeleteOutlined
             onClick={handleDelete}
@@ -65,22 +90,48 @@ const TextNode = ({ data, selected, id, onBeforeDelete }: TextNodeProps) => {
           />
         )}
 
-        <textarea
-          value={data.text ?? ""}
-          onChange={handleChange}
-          placeholder="Texto..."
+        {isEmpty && (
+          <div
+            style={{
+              position: "absolute",
+              top: 8,
+              left: 6,
+              color: "#aaa",
+              pointerEvents: "none",
+              fontFamily: data.fontFamily ?? "inherit",
+              fontSize: data.fontSize ?? 14,
+              userSelect: "none",
+            }}
+          >
+            Texto...
+          </div>
+        )}
+
+        <div
+          ref={editableRef}
+          contentEditable
+          suppressContentEditableWarning
+          onInput={handleInput}
           style={{
             width: "100%",
             height: "100%",
             background: "transparent",
-            border: "none",
             outline: "none",
-            resize: "none",
-            fontFamily: "inherit",
-            fontSize: 14,
             boxSizing: "border-box",
             padding: "8px 28px 8px 6px",
+            fontFamily: data.fontFamily ?? "inherit",
+            fontSize: data.fontSize ?? 14,
+            fontWeight: data.bold ? "bold" : "normal",
+            fontStyle: data.italic ? "italic" : "normal",
+            textDecoration: data.underline ? "underline" : "none",
+            color: data.fontColor ?? "inherit",
+            textAlign: data.textAlign ?? "left",
+            cursor: "text",
+            wordBreak: "break-word",
+            overflowY: "auto",
+            whiteSpace: "pre-wrap",
           }}
+          className="nodrag nopan"
         />
       </div>
     </div>
