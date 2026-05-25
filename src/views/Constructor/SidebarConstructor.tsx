@@ -129,7 +129,7 @@ export function SidebarConstructor({ onAddEntity, onAddNote, onAddSection, onAdd
             title="Adicionar Nota"
             style={{ height: 60 }}
             onClick={onAddNote}
-            icon={<FileOutlined style={{ fontSize: 20 }} />}
+            icon={<FileOutlined style={{ fontSize: 20, color: '#facc15' }} />}
           />
         </div>
       </div>

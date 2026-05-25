@@ -45,7 +45,7 @@ const cloneSnapshot = (snapshot: DiagramSnapshot): DiagramSnapshot =>
 const ConstructorPage: React.FC = () => {
   const { id } = useParams();
   const [messageApi, contextHolder] = message.useMessage();
-  const { getNodes } = useReactFlow();
+  const { getNodes, screenToFlowPosition } = useReactFlow();
   const [nodes, setNodes, onNodesChange] = useNodesState<CustomNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<CustomEdge>([]);
   const [pendingConnection, setPendingConnection] = useState<Connection | null>(
@@ -378,18 +378,28 @@ const ConstructorPage: React.FC = () => {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  const getNewNodePosition = useCallback(() => {
+    const existingNodes = getNodes();
+    const offset = (existingNodes.length % 8) * 40;
+    const center = screenToFlowPosition({
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 2,
+    });
+    return { x: center.x + offset, y: center.y + offset };
+  }, [getNodes, screenToFlowPosition]);
+
   const addTextNode = useCallback(() => {
     captureHistory();
 
     const newNode: CustomNode = {
       id: crypto.randomUUID(),
       type: "textNode",
-      position: { x: 300, y: 200 },
+      position: getNewNodePosition(),
       data: { text: "" },
     };
 
     setNodes((nds) => [...nds, newNode]);
-  }, [captureHistory, setNodes]);
+  }, [captureHistory, setNodes, getNewNodePosition]);
 
   const addSectionNode = useCallback(() => {
     captureHistory();
@@ -397,13 +407,13 @@ const ConstructorPage: React.FC = () => {
     const newNode: CustomNode = {
       id: crypto.randomUUID(),
       type: "sectionNode",
-      position: { x: 200, y: 150 },
+      position: getNewNodePosition(),
       style: { width: 300, height: 200, zIndex: -1 },
       data: { label: "Seção" },
     };
 
     setNodes((nds) => [...nds, newNode]);
-  }, [captureHistory, setNodes]);
+  }, [captureHistory, setNodes, getNewNodePosition]);
 
   const addNoteNode = useCallback(() => {
     captureHistory();
@@ -411,12 +421,12 @@ const ConstructorPage: React.FC = () => {
     const newNode: CustomNode = {
       id: crypto.randomUUID(),
       type: "noteNode",
-      position: { x: 300, y: 200 },
+      position: getNewNodePosition(),
       data: { text: "" },
     };
 
     setNodes((nds) => [...nds, newNode]);
-  }, [captureHistory, setNodes]);
+  }, [captureHistory, setNodes, getNewNodePosition]);
 
   const addEntityNode = useCallback(() => {
     captureHistory();
@@ -424,10 +434,7 @@ const ConstructorPage: React.FC = () => {
     const newNode: CustomNode = {
       id: crypto.randomUUID(),
       type: "entityNode",
-      position: {
-        x: 250,
-        y: 150,
-      },
+      position: getNewNodePosition(),
       data: {
         name: "Entidade",
         fields: [],
@@ -435,7 +442,7 @@ const ConstructorPage: React.FC = () => {
     };
 
     setNodes((nds) => [...nds, newNode]);
-  }, [captureHistory, setNodes]);
+  }, [captureHistory, setNodes, getNewNodePosition]);
 
   const onEdgeMouseEnter = useCallback(
     (event: React.MouseEvent, edge: Edge) => {
