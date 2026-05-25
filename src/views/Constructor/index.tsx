@@ -524,6 +524,7 @@ const ConstructorPage: React.FC = () => {
             x: Number(node.position?.x ?? 0),
             y: Number(node.position?.y ?? 0),
           },
+          style: node.style ?? null,
         })),
         edges: edges.map((edge) => ({
           id: edge.id,
