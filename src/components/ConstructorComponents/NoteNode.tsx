@@ -32,7 +32,7 @@ const NoteNode = ({ data, selected, id, onBeforeDelete }: NoteNodeProps) => {
     <div
       style={{
         background: "#fef9c3",
-        border: selected ? "1.5px solid #facc15" : "1px solid #fde68a",
+        border: selected ? "1.5px dashed #facc15" : "1px solid #fde68a",
         borderRadius: 8,
         padding: 8,
         minWidth: 150,
@@ -75,7 +75,6 @@ const NoteNode = ({ data, selected, id, onBeforeDelete }: NoteNodeProps) => {
           boxSizing: "border-box",
           paddingRight: selected ? 20 : 0,
         }}
-        className="nodrag nopan"
       />
     </div>
   );
