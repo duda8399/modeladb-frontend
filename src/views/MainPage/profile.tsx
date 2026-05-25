@@ -68,11 +68,15 @@ const ProfilePage: React.FC = () => {
         formData.append("avatarUrl", "");
       }
 
-      await api.put(`/user/${id}`, formData, {
+      const { data } = await api.put(`/user/${id}`, formData, {
         headers: {
           "Content-Type": "multipart/form-data",
         },
       });
+
+      const newAvatarUrl = data.avatarUrl ?? "";
+      localStorage.setItem("avatar", newAvatarUrl);
+      window.dispatchEvent(new StorageEvent("storage", { key: "avatar", newValue: newAvatarUrl }));
 
       messageApi.success("Perfil atualizado com sucesso!");
     } catch (error) {

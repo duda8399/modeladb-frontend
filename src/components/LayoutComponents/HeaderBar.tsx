@@ -6,6 +6,7 @@ import {
   UserOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 const { Header } = Layout;
 
 type HeaderBarProps = {
@@ -32,11 +33,21 @@ const profileMenuItems: MenuProps["items"] = [
 
 export function HeaderBar({ collapsed, setCollapsed }: HeaderBarProps) {
   const navigate = useNavigate();
-  const storedAvatar = localStorage.getItem("avatar");
-  const avatarUrl =
-    storedAvatar && storedAvatar !== "null" && storedAvatar !== "undefined"
-      ? storedAvatar
-      : undefined;
+  const [avatarUrl, setAvatarUrl] = useState<string | undefined>(() => {
+    const v = localStorage.getItem("avatar");
+    return v && v !== "null" && v !== "undefined" ? v : undefined;
+  });
+
+  useEffect(() => {
+    const handler = (e: StorageEvent) => {
+      if (e.key === "avatar") {
+        const v = e.newValue;
+        setAvatarUrl(v && v !== "null" && v !== "undefined" ? v : undefined);
+      }
+    };
+    window.addEventListener("storage", handler);
+    return () => window.removeEventListener("storage", handler);
+  }, []);
   const {
     token: { colorPrimary },
   } = theme.useToken();
