@@ -37,6 +37,7 @@ const ProfilePage: React.FC = () => {
 
       form.setFieldsValue({
         name: data.name,
+        openaiToken: data.openaiToken ?? "",
       });
 
       if (data.avatarUrl) {
@@ -49,9 +50,31 @@ const ProfilePage: React.FC = () => {
     }
   }
 
+  async function validateOpenAIToken(token: string): Promise<boolean> {
+    try {
+      const res = await fetch("https://api.openai.com/v1/models", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
   async function onFinish(values: any) {
     try {
       setLoading(true);
+
+      const token = values.openaiToken?.trim() ?? "";
+
+      if (token) {
+        const valid = await validateOpenAIToken(token);
+        if (!valid) {
+          messageApi.error("Token da OpenAI inválido. Verifique e tente novamente.");
+          setLoading(false);
+          return;
+        }
+      }
 
       const id = localStorage.getItem("userId");
 
@@ -61,6 +84,8 @@ const ProfilePage: React.FC = () => {
       if (values.password) {
         formData.append("password", values.password);
       }
+
+      formData.append("openaiToken", token);
 
       if (avatarFile) {
         formData.append("avatar", avatarFile);
@@ -175,6 +200,21 @@ const ProfilePage: React.FC = () => {
               <Input.Password
                 size="large"
                 placeholder="Confirme a nova senha"
+              />
+            </Form.Item>
+
+            <Divider />
+
+            <Title level={5}>Integrações</Title>
+
+            <Form.Item
+              label="Token da OpenAI"
+              name="openaiToken"
+              extra="Seu token é armazenado com segurança e usado para gerar sugestões com IA."
+            >
+              <Input.Password
+                size="large"
+                placeholder="sk-..."
               />
             </Form.Item>
 
