@@ -5,7 +5,6 @@ import {
   AlignRightOutlined,
   BgColorsOutlined,
   BoldOutlined,
-  CloseCircleOutlined,
   FontColorsOutlined,
   ItalicOutlined,
   LinkOutlined,
@@ -109,6 +108,48 @@ export function EditorToolbar({
 }: EditorToolbarProps) {
   useEffect(() => startTrackingSelection(), []);
 
+  useEffect(() => {
+    const handler = () => {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0 || sel.toString().length === 0) {
+        setActiveFont(undefined);
+        setActiveFontSize(undefined);
+        setActiveBold(undefined);
+        setActiveItalic(undefined);
+        setActiveUnderline(undefined);
+        setActiveAlign(undefined);
+        return;
+      }
+      const range = sel.getRangeAt(0);
+      const container = range.commonAncestorContainer;
+      const el = (
+        container.nodeType === Node.TEXT_NODE
+          ? container.parentElement
+          : (container as Element)
+      ) as HTMLElement | null;
+      if (!el?.closest("[contenteditable]")) {
+        setActiveFont(undefined);
+        setActiveFontSize(undefined);
+        setActiveBold(undefined);
+        setActiveItalic(undefined);
+        setActiveUnderline(undefined);
+        setActiveAlign(undefined);
+        return;
+      }
+      const computed = window.getComputedStyle(el);
+      const rawFont = computed.fontFamily.split(",")[0].trim().replace(/['"]/g, "");
+      const fontSize = parseFloat(computed.fontSize);
+      if (rawFont) setActiveFont(rawFont);
+      if (!isNaN(fontSize)) setActiveFontSize(Math.round(fontSize));
+      setActiveBold(parseInt(computed.fontWeight) >= 700 || computed.fontWeight === "bold");
+      setActiveItalic(computed.fontStyle === "italic");
+      setActiveUnderline(computed.textDecorationLine.includes("underline"));
+      setActiveAlign(computed.textAlign || undefined);
+    };
+    document.addEventListener("selectionchange", handler);
+    return () => document.removeEventListener("selectionchange", handler);
+  }, []);
+
   const selectedTextNodes = nodes.filter(
     (n) => n.selected && (n.type === "textNode" || n.type === "noteNode"),
   );
@@ -118,10 +159,18 @@ export function EditorToolbar({
 
   const [activeFont, setActiveFont] = useState<string | undefined>(undefined);
   const [activeFontSize, setActiveFontSize] = useState<number | undefined>(undefined);
+  const [activeBold, setActiveBold] = useState<boolean | undefined>(undefined);
+  const [activeItalic, setActiveItalic] = useState<boolean | undefined>(undefined);
+  const [activeUnderline, setActiveUnderline] = useState<boolean | undefined>(undefined);
+  const [activeAlign, setActiveAlign] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     setActiveFont(undefined);
     setActiveFontSize(undefined);
+    setActiveBold(undefined);
+    setActiveItalic(undefined);
+    setActiveUnderline(undefined);
+    setActiveAlign(undefined);
   }, [selectedNodeId]);
 
   const updateTextNodes = (patch: Record<string, unknown>) => {
@@ -134,14 +183,13 @@ export function EditorToolbar({
     );
   };
 
-  const currentFont = activeFont ?? ((firstData?.fontFamily as string) ?? "Inter");
-  const currentSize = activeFontSize ?? ((firstData?.fontSize as number) ?? 14);
-  const isBold = !!(firstData?.bold);
-  const isItalic = !!(firstData?.italic);
-  const isUnderline = !!(firstData?.underline);
+  const currentFont = activeFont ?? ((firstData?.fontFamily as string));
+  const currentSize = activeFontSize ?? ((firstData?.fontSize as number));
+  const isBold = activeBold ?? !!(firstData?.bold);
+  const isItalic = activeItalic ?? !!(firstData?.italic);
+  const isUnderline = activeUnderline ?? !!(firstData?.underline);
   const currentFontColor = (firstData?.fontColor as string) ?? "#000000";
-  const currentAlign = (firstData?.textAlign as string) ?? "left";
-  const currentTextBgColor = (firstData?.textBgColor as string) ?? "";
+  const currentAlign = activeAlign;
 
   return (
     <div
@@ -192,6 +240,8 @@ export function EditorToolbar({
               activeEl?.querySelectorAll('font[size="7"]').forEach((fontEl) => {
                 const span = document.createElement("span");
                 span.style.fontSize = `${val}px`;
+                const face = (fontEl as HTMLElement).getAttribute("face");
+                if (face) span.style.fontFamily = face;
                 span.innerHTML = (fontEl as HTMLElement).innerHTML;
                 fontEl.parentNode?.replaceChild(span, fontEl);
                 spans.push(span);
@@ -280,42 +330,64 @@ export function EditorToolbar({
           />
         </ColorPicker>
 
-        {isTextLike && currentTextBgColor && (
-          <Button
-            title="Remover cor de fundo"
-            icon={<CloseCircleOutlined />}
-            size="small"
-            onClick={() => updateTextNodes({ textBgColor: "" })}
-          />
-        )}
-
         <Button
           title="Alinhar à esquerda"
           icon={<AlignLeftOutlined />}
           disabled={!isTextLike}
           type={currentAlign === "left" ? "primary" : "default"}
-          onClick={() => updateTextNodes({ textAlign: "left" })}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            if (restoreSelection()) {
+              document.execCommand("justifyLeft");
+            } else {
+              updateTextNodes({ textAlign: "left" });
+            }
+          }}
         />
         <Button
           title="Centralizar"
           icon={<AlignCenterOutlined />}
           disabled={!isTextLike}
           type={currentAlign === "center" ? "primary" : "default"}
-          onClick={() => updateTextNodes({ textAlign: "center" })}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            if (restoreSelection()) {
+              document.execCommand("justifyCenter");
+              setTimeout(() => restoreSelection(), 0);
+            } else {
+              updateTextNodes({ textAlign: "center" });
+            }
+          }}
         />
         <Button
           title="Alinhar à direita"
           icon={<AlignRightOutlined />}
           disabled={!isTextLike}
           type={currentAlign === "right" ? "primary" : "default"}
-          onClick={() => updateTextNodes({ textAlign: "right" })}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            if (restoreSelection()) {
+              document.execCommand("justifyRight");
+              setTimeout(() => restoreSelection(), 0);
+            } else {
+              updateTextNodes({ textAlign: "right" });
+            }
+          }}
         />
         <Button
           title="Justificado"
           icon={<MdFormatAlignJustify style={{ fontSize: 14 }} />}
           disabled={!isTextLike}
           type={currentAlign === "justify" ? "primary" : "default"}
-          onClick={() => updateTextNodes({ textAlign: "justify" })}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            if (restoreSelection()) {
+              document.execCommand("justifyFull");
+              setTimeout(() => restoreSelection(), 0);
+            } else {
+              updateTextNodes({ textAlign: "justify" });
+            }
+          }}
         />
 
         <ColorPicker
@@ -326,7 +398,7 @@ export function EditorToolbar({
             title="Adicionar cor de fundo"
             icon={<BgColorsOutlined />}
             type={bgColorActive ? "primary" : "default"}
-            style={bgColorActive ? { borderColor: bgColor, color: bgColor } : {}}
+            style={bgColorActive ? { color: '#fff' } : {}}
           />
         </ColorPicker>
 

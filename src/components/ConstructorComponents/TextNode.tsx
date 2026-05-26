@@ -63,6 +63,20 @@ const TextNode = ({ data, selected, id, onBeforeDelete }: TextNodeProps) => {
     );
   }, [id, setNodes]);
 
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData("text/plain");
+    const selection = window.getSelection();
+    if (!selection?.rangeCount) return;
+    const range = selection.getRangeAt(0);
+    range.deleteContents();
+    range.insertNode(document.createTextNode(text));
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    editableRef.current?.dispatchEvent(new Event("input", { bubbles: true }));
+  }, []);
+
   const handleDelete = useCallback(() => {
     onBeforeDelete?.();
     setNodes((nds) => nds.filter((n) => n.id !== id));
@@ -124,6 +138,7 @@ const TextNode = ({ data, selected, id, onBeforeDelete }: TextNodeProps) => {
           contentEditable
           suppressContentEditableWarning
           onInput={handleInput}
+          onPaste={handlePaste}
           onFocus={handleFocus}
           onBlur={handleBlur}
           style={{
