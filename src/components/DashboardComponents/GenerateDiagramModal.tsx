@@ -8,7 +8,7 @@ const { TextArea } = Input;
 type GenerateDiagramModalProps = {
   open: boolean;
   onClose: () => void;
-  onGenerate?: (prompt: string) => void;
+  onGenerate?: (prompt: string) => void | Promise<void>;
 };
 
 const GenerateDiagramModal: React.FC<GenerateDiagramModalProps> = ({
@@ -17,17 +17,24 @@ const GenerateDiagramModal: React.FC<GenerateDiagramModalProps> = ({
   onGenerate,
 }) => {
   const [prompt, setPrompt] = React.useState("");
+  const [loading, setLoading] = React.useState(false);
 
-  const handleGenerate = () => {
-    if (onGenerate) {
-      onGenerate(prompt);
+  const handleGenerate = async () => {
+    if (!onGenerate) return;
+
+    try {
+      setLoading(true);
+      await onGenerate(prompt);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <Modal
       open={open}
-      onCancel={onClose}
+      onCancel={loading ? undefined : onClose}
+      maskClosable={!loading}
       footer={null}
       width={720}
       centered
@@ -59,7 +66,7 @@ const GenerateDiagramModal: React.FC<GenerateDiagramModalProps> = ({
               <TextArea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Generate a database model for IT asset management."
+                placeholder="Gere um modelo de banco de dados."
                 rows={5}
                 style={{ marginTop: 8, borderRadius: 8 }}
               />
@@ -70,9 +77,10 @@ const GenerateDiagramModal: React.FC<GenerateDiagramModalProps> = ({
                 type="primary"
                 onClick={handleGenerate}
                 disabled={!prompt.trim()}
+                loading={loading}
                 style={{ borderRadius: 8 }}
               >
-                Gerar
+                {loading ? "Gerando..." : "Gerar"}
               </Button>
             </div>
           </Space>

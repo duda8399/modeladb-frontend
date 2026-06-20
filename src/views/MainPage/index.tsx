@@ -57,7 +57,40 @@ const MainPage: React.FC = () => {
   };
 
   const handleGenerate = async (prompt: string) => {
-    console.log("prompt", prompt);
+    try {
+      const token = getToken();
+
+      const { data: generated } = await api.post(
+        "/openai/generate-diagram",
+        { description: prompt },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      const { data: diagram } = await api.post("/diagram/create", {
+        name: generated?.diagramName || "Diagrama gerado por IA",
+        userId,
+      });
+
+      if (!diagram?.id) {
+        throw new Error("Não foi possível criar o diagrama");
+      }
+
+      await api.put(
+        `/diagram/${diagram.id}`,
+        {
+          name: generated?.diagramName,
+          nodes: generated?.nodes ?? [],
+          edges: generated?.edges ?? [],
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setIsGenerateDiagramModalOpen(false);
+      navigate(`/model/${diagram.id}`);
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.message;
+      messageApi.error(errorMessage || "Ocorreu um erro ao gerar o diagrama");
+    }
   };
 
   const handleDelete = async (id: string) => {
