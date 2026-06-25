@@ -5,6 +5,7 @@ import AttributesModal from "./AttributesModal";
 import DeleteModal from "./DeleteModal";
 import { Handle, Position, useReactFlow } from "reactflow";
 import type { Field } from "../../types/diagramER";
+import { FkIcon } from "./FieldIcons";
 
 interface Props {
   id: string;
@@ -64,7 +65,7 @@ export default memo(function EntityNode({ id, data, onBeforeDelete }: Props) {
 
       <Card
         size="small"
-        style={{ width: 240 }}
+        style={{ width: 300 }}
         styles={{
           header: {
             background: "#d9d9d9",
@@ -107,8 +108,9 @@ export default memo(function EntityNode({ id, data, onBeforeDelete }: Props) {
                 padding: 0,
                 background: "transparent",
                 color: "#333333",
-                borderBottom: "1px solid #595959",
+                border: "none",
                 borderRadius: 0,
+                textAlign: "center",
               }}
             />
 
@@ -134,6 +136,7 @@ export default memo(function EntityNode({ id, data, onBeforeDelete }: Props) {
             >
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 {field.pk && <KeyOutlined style={{ color: "#faad14" }} />}
+                {field.fk && <FkIcon />}
                 <span>{field.name || "-"}</span>
               </div>
             </Col>
@@ -161,15 +164,23 @@ export default memo(function EntityNode({ id, data, onBeforeDelete }: Props) {
           </Button>
         </div>
 
+        {/* Em ConnectionMode.Loose qualquer handle pode iniciar ou receber
+            uma conexao, entao o lado de onde voce arrasta (1o clique) vira o
+            source e onde voce solta (2o clique) vira o target. Assim a direcao
+            da FK segue a ordem do clique, e nao a posicao das tabelas. */}
         <Handle
-          type="target"
+          type="source"
+          id="left"
           position={Position.Left}
-          style={{ width: 12, height: 12, left: -10, background: "#000000" }}
+          className="entity-handle"
+          style={{ left: -9 }}
         />
         <Handle
           type="source"
+          id="right"
           position={Position.Right}
-          style={{ width: 12, height: 12, right: -10, background: "#000000" }}
+          className="entity-handle"
+          style={{ right: -9 }}
         />
       </Card>
     </>

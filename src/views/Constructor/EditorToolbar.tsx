@@ -425,7 +425,7 @@ export function EditorToolbar({
           onChange={(e) => onDiagramNameChange(e.target.value)}
           placeholder="Nome do diagrama"
           style={{
-            width: 220,
+            width: 320,
             height: 32,
             border: "1px solid #d9d9d9",
             borderRadius: 6,

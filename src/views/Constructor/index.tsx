@@ -9,6 +9,7 @@ import {
   addEdge,
   useEdgesState,
   useNodesState,
+  ConnectionMode,
   type Connection,
   type Edge,
   getNodesBounds,
@@ -601,6 +602,7 @@ const ConstructorPage: React.FC = () => {
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
+            connectionMode={ConnectionMode.Loose}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onNodeDragStart={captureHistory}
