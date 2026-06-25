@@ -531,6 +531,8 @@ const ConstructorPage: React.FC = () => {
           source: edge.source,
           sourceHandle: edge.sourceHandle || null,
           target: edge.target,
+          label: edge.label ?? null,
+          type: edge.type || "bezier",
           data: edge.data,
         })),
         ...(thumbnail ? { thumbnail } : {}),
