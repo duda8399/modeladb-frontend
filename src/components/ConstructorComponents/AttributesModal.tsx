@@ -1,10 +1,9 @@
 import { useState } from "react";
-import { DeleteOutlined, HolderOutlined } from "@ant-design/icons";
+import { CloseOutlined, HolderOutlined } from "@ant-design/icons";
 import {
   Button,
   Checkbox,
   Col,
-  Divider,
   Input,
   Modal,
   Row,
@@ -185,7 +184,16 @@ export default function Attributes({
         size="middle"
         style={{ width: "100%", paddingRight: 24 }}
       >
-        <div style={{ display: "flex", alignItems: "center", paddingTop: 8 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            padding: "10px 8px",
+            background: "#E8F5E9",
+            borderRadius: 6,
+            borderBottom: "2px solid #2F7D32",
+          }}
+        >
           <div style={{ width: 24, flexShrink: 0 }} />
           <Row gutter={16} align="middle" style={{ flex: 1 }}>
             <Col span={5}>
@@ -219,8 +227,6 @@ export default function Attributes({
             <Col span={1} />
           </Row>
         </div>
-
-        <Divider style={{ margin: "1px 0" }} />
 
         {fields.map((field, index) => (
           <div
@@ -338,13 +344,9 @@ export default function Attributes({
             <Col span={1}>
               <Tooltip title="Remover atributo">
                 <Button
-                  style={{
-                    backgroundColor: "#B11226",
-                    border: "none",
-                    color: "#FFF",
-                  }}
-                  shape="circle"
-                  icon={<DeleteOutlined />}
+                  type="text"
+                  style={{ color: "#B11226", border: "none" }}
+                  icon={<CloseOutlined />}
                   onClick={() => removeField(field.id)}
                 />
               </Tooltip>

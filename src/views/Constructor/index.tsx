@@ -26,6 +26,7 @@ import SectionNode from "../../components/ConstructorComponents/SectionNode";
 import TextNode from "../../components/ConstructorComponents/TextNode";
 import RelationModal from "../../components/ConstructorComponents/RelationModal";
 import RemoveEdge from "../../components/ConstructorComponents/RemoverEdge";
+import FloatingEdge from "../../components/ConstructorComponents/FloatingEdge";
 import type {
   CustomEdge,
   CustomNode,
@@ -126,6 +127,8 @@ const ConstructorPage: React.FC = () => {
     ],
   );
 
+  const edgeTypes = useMemo(() => ({ floating: FloatingEdge }), []);
+
   const applySnapshot = useCallback(
     (snapshot: DiagramSnapshot) => {
       setDiagramName(snapshot.diagramName);
@@ -169,6 +172,10 @@ const ConstructorPage: React.FC = () => {
         let loadedEdges = Array.isArray(data?.edges) ? data.edges : [];
 
         loadedEdges = loadedEdges.map((edge: any) => {
+          // Arestas antigas eram "bezier" com handle fixo; convertemos para
+          // "floating" para que o traçado acompanhe a posição das tabelas.
+          const normalizedEdge = { ...edge, type: "floating" };
+
           if (!edge.data) {
             const sourceNode = loadedNodes.find(
               (n: any) => n.id === edge.source,
@@ -176,7 +183,7 @@ const ConstructorPage: React.FC = () => {
             const sourceName = (sourceNode?.data as any)?.name || edge.source;
 
             return {
-              ...edge,
+              ...normalizedEdge,
               data: {
                 relationType: "1:1",
                 sourceNodeId: edge.source,
@@ -185,7 +192,7 @@ const ConstructorPage: React.FC = () => {
               },
             };
           }
-          return edge;
+          return normalizedEdge;
         });
 
         setDiagramName(loadedName);
@@ -274,7 +281,7 @@ const ConstructorPage: React.FC = () => {
         source: sourceNodeId as string,
         target: junctionId,
         label: "1:N",
-        type: "bezier",
+        type: "floating",
         data: {
           relationType: "1:N",
           sourceNodeId: sourceNodeId as string,
@@ -288,7 +295,7 @@ const ConstructorPage: React.FC = () => {
         source: junctionId,
         target: targetNodeId as string,
         label: "1:N",
-        type: "bezier",
+        type: "floating",
         data: {
           relationType: "1:N",
           sourceNodeId: sourceNodeId as string,
@@ -304,7 +311,7 @@ const ConstructorPage: React.FC = () => {
           {
             ...pendingConnection,
             label: relationType,
-            type: "bezier",
+            type: "floating",
             data: {
               relationType,
               sourceNodeId: sourceNodeId as string,
@@ -533,7 +540,7 @@ const ConstructorPage: React.FC = () => {
           sourceHandle: edge.sourceHandle || null,
           target: edge.target,
           label: edge.label ?? null,
-          type: edge.type || "bezier",
+          type: edge.type || "floating",
           data: edge.data,
         })),
         ...(thumbnail ? { thumbnail } : {}),
@@ -602,6 +609,7 @@ const ConstructorPage: React.FC = () => {
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             connectionMode={ConnectionMode.Loose}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}

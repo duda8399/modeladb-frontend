@@ -57,45 +57,18 @@ body {
   inset-inline-start: 25%;
 }
 
-/* ---------------- REACTFLOW HANDLES ---------------- */
+/* ---------------- REACTFLOW HANDLES (floating) ---------------- */
 
-/* Ponto de conexao: discreto por padrao, branco com anel verde da marca */
-.react-flow__handle.entity-handle {
-  width: 12px;
-  height: 12px;
-  background: #ffffff;
-  border: 2px solid #2f7d32;
-  border-radius: 50%;
-  opacity: 0.45;
-  transition:
-    opacity 0.12s ease,
-    background 0.12s ease,
-    box-shadow 0.12s ease;
-}
-
-/* Ao passar o mouse na tabela, os pontos ficam visiveis */
-.react-flow__node:hover .react-flow__handle.entity-handle {
-  opacity: 1;
-}
-
-/* Hover direto no ponto: preenche e ganha halo */
-.react-flow__handle.entity-handle:hover {
-  opacity: 1;
-  background: #2f7d32;
-  box-shadow: 0 0 0 4px rgba(47, 125, 50, 0.2);
-  cursor: crosshair;
-}
-
-/* Enquanto arrasta uma nova conexao */
-.react-flow__handle-connecting.entity-handle {
-  opacity: 1;
-  background: #2f7d32;
-}
-
-/* Quando o destino e valido */
-.react-flow__handle-valid.entity-handle {
-  opacity: 1;
-  background: #52c41a;
-  border-color: #52c41a;
-  box-shadow: 0 0 0 4px rgba(82, 196, 26, 0.25);
+/* Faixa invisivel cobrindo a borda lateral da tabela. Sem bolinhas: a conexao
+   e iniciada/recebida arrastando a partir da lateral. O cursor crosshair
+   indica que a area e conectavel. */
+.react-flow__handle.floating-handle {
+  width: 14px;
+  height: 100%;
+  top: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  opacity: 0;
+  transform: none;
 }

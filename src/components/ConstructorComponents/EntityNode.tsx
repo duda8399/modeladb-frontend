@@ -1,6 +1,6 @@
 import { memo, useState } from "react";
 import { Card, Row, Col, Button, Input } from "antd";
-import { DeleteOutlined, KeyOutlined } from "@ant-design/icons";
+import { CloseOutlined, KeyOutlined } from "@ant-design/icons";
 import AttributesModal from "./AttributesModal";
 import DeleteModal from "./DeleteModal";
 import { Handle, Position, useReactFlow } from "reactflow";
@@ -68,7 +68,7 @@ export default memo(function EntityNode({ id, data, onBeforeDelete }: Props) {
         style={{ width: 300 }}
         styles={{
           header: {
-            background: "#d9d9d9",
+            background: "#2F7D32",
             padding: "6px 10px",
           },
           body: { padding: 0 },
@@ -107,15 +107,15 @@ export default memo(function EntityNode({ id, data, onBeforeDelete }: Props) {
                 fontWeight: "bold",
                 padding: 0,
                 background: "transparent",
-                color: "#333333",
+                color: "#FFFFFF",
                 border: "none",
                 borderRadius: 0,
                 textAlign: "center",
               }}
             />
 
-            <DeleteOutlined
-              style={{ cursor: "pointer", color: "#B11226" }}
+            <CloseOutlined
+              style={{ cursor: "pointer", color: "#FFFFFF" }}
               onClick={() => setOpenDelete(true)}
             />
           </div>
@@ -157,7 +157,7 @@ export default memo(function EntityNode({ id, data, onBeforeDelete }: Props) {
         >
           <Button
             type="text"
-            style={{ background: "#2F7D32", color: "#FFF", width: "100%" }}
+            style={{ background: "#d9d9d9", color: "#333333", width: "100%" }}
             onClick={() => setOpen(true)}
           >
             Configurar atributos
@@ -168,19 +168,22 @@ export default memo(function EntityNode({ id, data, onBeforeDelete }: Props) {
             uma conexao, entao o lado de onde voce arrasta (1o clique) vira o
             source e onde voce solta (2o clique) vira o target. Assim a direcao
             da FK segue a ordem do clique, e nao a posicao das tabelas. */}
+        {/* Faixas invisiveis nas laterais: permitem iniciar/receber conexoes
+            sem mostrar bolinhas. Com floating edges o ponto exato do handle nao
+            importa, entao escondemos e usamos a borda inteira como area. */}
         <Handle
           type="source"
           id="left"
           position={Position.Left}
-          className="entity-handle"
-          style={{ left: -9 }}
+          className="floating-handle"
+          style={{ left: 0 }}
         />
         <Handle
           type="source"
           id="right"
           position={Position.Right}
-          className="entity-handle"
-          style={{ right: -9 }}
+          className="floating-handle"
+          style={{ right: 0 }}
         />
       </Card>
     </>
