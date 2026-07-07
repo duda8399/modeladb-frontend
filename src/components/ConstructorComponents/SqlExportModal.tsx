@@ -3,6 +3,7 @@ import { Alert, Modal, Segmented, message } from "antd";
 import { DownloadOutlined } from "@ant-design/icons";
 import CodeMirror from "@uiw/react-codemirror";
 import { sql, MySQL, PostgreSQL } from "@codemirror/lang-sql";
+import { EditorView } from "@codemirror/view";
 
 import type { CustomEdge, CustomNode } from "../../types/diagramER";
 import {
@@ -56,6 +57,7 @@ export function SqlExportModal({
       open={open}
       onCancel={onClose}
       width={800}
+      height={400}
       okText="Baixar .sql"
       okButtonProps={{ icon: <DownloadOutlined /> }}
       onOk={handleDownload}
@@ -89,8 +91,11 @@ export function SqlExportModal({
       ) : (
         <CodeMirror
           value={script}
-          height="480px"
-          extensions={[sql({ dialect: dialect === "mysql" ? MySQL : PostgreSQL })]}
+          height="380px"
+          extensions={[
+            sql({ dialect: dialect === "mysql" ? MySQL : PostgreSQL }),
+            EditorView.lineWrapping,
+          ]}
           onChange={setScript}
         />
       )}
