@@ -194,16 +194,18 @@ export function EditorToolbar({
   return (
     <div
       style={{
-        height: 48,
+        minHeight: 48,
         display: "flex",
+        flexWrap: "wrap",
         alignItems: "center",
         justifyContent: "space-between",
-        padding: "0 16px",
+        rowGap: 8,
+        padding: "8px 16px",
         borderBottom: "1px solid #e5e7eb",
         background: "#fafafa",
       }}
     >
-      <Space size={8}>
+      <Space size={8} wrap>
         <Select
           value={isTextLike ? currentFont : undefined}
           disabled={!isTextLike}
@@ -419,13 +421,13 @@ export function EditorToolbar({
         />
       </Space>
 
-      <Space>
+      <Space wrap>
         <input
           value={diagramName}
           onChange={(e) => onDiagramNameChange(e.target.value)}
           placeholder="Nome do diagrama"
           style={{
-            width: 320,
+            width: "clamp(140px, 20vw, 320px)",
             height: 32,
             border: "1px solid #d9d9d9",
             borderRadius: 6,

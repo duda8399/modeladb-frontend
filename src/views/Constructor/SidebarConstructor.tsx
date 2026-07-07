@@ -32,9 +32,10 @@ interface Props {
   onAddSection: () => void;
   onAddText: () => void;
   onGenerate?: (prompt: string) => void;
+  generating?: boolean;
 }
 
-export function SidebarConstructor({ onAddEntity, onAddNote, onAddSection, onAddText, onGenerate }: Props) {
+export function SidebarConstructor({ onAddEntity, onAddNote, onAddSection, onAddText, onGenerate, generating }: Props) {
   const [prompt, setPrompt] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [tokenLoading, setTokenLoading] = useState(false);
@@ -53,6 +54,8 @@ export function SidebarConstructor({ onAddEntity, onAddNote, onAddSection, onAdd
   }
 
   async function handleGenerateClick() {
+    if (generating) return;
+
     if (!prompt.trim()) {
       messageApi.warning("Descreva a estrutura e os requisitos do seu banco de dados antes de gerá-lo.");
       return;
@@ -109,6 +112,8 @@ export function SidebarConstructor({ onAddEntity, onAddNote, onAddSection, onAdd
         background: "#fafafa",
         minHeight: "100%",
         width: 260,
+        flexShrink: 0,
+        overflowY: "auto",
         borderRight: "1px solid #e5e7eb",
         padding: 12,
         fontSize: 13,
@@ -140,6 +145,7 @@ export function SidebarConstructor({ onAddEntity, onAddNote, onAddSection, onAdd
           autoSize={{ minRows: 3, maxRows: 5 }}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
+          disabled={generating}
         />
 
         <div
@@ -156,6 +162,7 @@ export function SidebarConstructor({ onAddEntity, onAddNote, onAddSection, onAdd
             }}
             icon={<ThunderboltOutlined />}
             onClick={handleGenerateClick}
+            loading={generating}
           >
             Gerar
           </Button>

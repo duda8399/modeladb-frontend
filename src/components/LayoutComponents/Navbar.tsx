@@ -75,6 +75,8 @@ export function Navbar() {
           display: "flex",
           alignItems: "center",
           gap: 40,
+          flex: 1,
+          minWidth: 0,
         }}
       >
         <div
@@ -84,6 +86,8 @@ export function Navbar() {
             display: "flex",
             alignItems: "center",
             cursor: "pointer",
+            flexShrink: 0,
+            overflow: "hidden",
           }}
         >
           <img
@@ -106,7 +110,8 @@ export function Navbar() {
           style={{
             background: "transparent",
             borderBottom: "none",
-            minWidth: "100%",
+            flex: 1,
+            minWidth: 0,
           }}
           onClick={({ key }) => navigate(routes[key])}
           items={[
@@ -134,7 +139,7 @@ export function Navbar() {
         trigger={["click"]}
         placement="bottomRight"
       >
-        <Button type="text" style={{ color: "#fff" }}>
+        <Button type="text" style={{ color: "#fff", flexShrink: 0 }}>
           <Avatar size={36} src={avatarUrl} icon={<UserOutlined />} />
         </Button>
       </Dropdown>

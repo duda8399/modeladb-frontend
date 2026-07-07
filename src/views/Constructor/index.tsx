@@ -34,6 +34,7 @@ import type {
 } from "../../types/diagramER";
 import { useParams } from "react-router-dom";
 import { api } from "../../services/api";
+import { getToken } from "../../utils/auth";
 
 type DiagramSnapshot = {
   nodes: CustomNode[];
@@ -59,6 +60,7 @@ const ConstructorPage: React.FC = () => {
   );
   const [diagramName, setDiagramName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const [bgColorMode, setBgColorMode] = useState(false);
@@ -555,8 +557,48 @@ const ConstructorPage: React.FC = () => {
     }
   }, [diagramName, edges, id, messageApi, nodes]);
 
+  const handleGenerate = useCallback(
+    async (prompt: string) => {
+      setGenerating(true);
+
+      try {
+        const token = getToken();
+        const { data } = await api.post(
+          "/openai/generate-diagram",
+          {
+            description: prompt,
+            diagramName,
+            nodes,
+            edges,
+          },
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+
+        captureHistory();
+        setDiagramName(data?.diagramName || diagramName);
+        setNodes(Array.isArray(data?.nodes) ? data.nodes : []);
+        setEdges(Array.isArray(data?.edges) ? data.edges : []);
+
+        messageApi.success("Diagrama gerado com sucesso");
+      } catch (error: any) {
+        const errorMessage = error?.response?.data?.message;
+        messageApi.error(errorMessage || "Não foi possível gerar o diagrama");
+      } finally {
+        setGenerating(false);
+      }
+    },
+    [captureHistory, diagramName, edges, messageApi, nodes, setEdges, setNodes],
+  );
+
   return (
-    <Layout style={{ margin: 0, padding: 0 }}>
+    <Layout
+      style={{
+        margin: 0,
+        padding: 0,
+        height: "100vh",
+        overflow: "hidden",
+      }}
+    >
       {contextHolder}
       <RelationModal
         open={openRelationModal}
@@ -587,7 +629,8 @@ const ConstructorPage: React.FC = () => {
       <div
         style={{
           display: "flex",
-          height: "87vh",
+          flex: 1,
+          minHeight: 0,
           overflow: "hidden",
         }}
       >
@@ -596,12 +639,15 @@ const ConstructorPage: React.FC = () => {
           onAddNote={addNoteNode}
           onAddSection={addSectionNode}
           onAddText={addTextNode}
+          onGenerate={handleGenerate}
+          generating={generating}
         />
 
         <div
           ref={reactFlowContainerRef}
           style={{
             flex: 1,
+            minWidth: 0,
             cursor: bgColorMode ? "crosshair" : undefined,
           }}
         >
