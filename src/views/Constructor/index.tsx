@@ -639,6 +639,9 @@ const ConstructorPage: React.FC = () => {
           onAddText={addTextNode}
           onGenerate={handleGenerate}
           generating={generating}
+          diagramName={diagramName}
+          nodes={nodes}
+          edges={edges}
         />
 
         <div

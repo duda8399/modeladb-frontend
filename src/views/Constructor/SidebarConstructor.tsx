@@ -4,14 +4,19 @@ import {
   AppstoreOutlined,
   BorderOutlined,
   DatabaseOutlined,
+  ExportOutlined,
   FileOutlined,
   FontSizeOutlined,
   KeyOutlined,
   RobotOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
+import { SiMysql, SiPostgresql } from "react-icons/si";
 import { api } from "../../services/api";
 import { getCurrentUser } from "../../utils/auth";
+import type { SqlDialect } from "../../utils/sqlExport";
+import type { CustomEdge, CustomNode } from "../../types/diagramER";
+import { SqlExportModal } from "../../components/ConstructorComponents/SqlExportModal";
 
 const nodeStyle = {
   padding: "8px 10px",
@@ -33,14 +38,29 @@ interface Props {
   onAddText: () => void;
   onGenerate?: (prompt: string) => void;
   generating?: boolean;
+  diagramName: string;
+  nodes: CustomNode[];
+  edges: CustomEdge[];
 }
 
-export function SidebarConstructor({ onAddEntity, onAddNote, onAddSection, onAddText, onGenerate, generating }: Props) {
+export function SidebarConstructor({
+  onAddEntity,
+  onAddNote,
+  onAddSection,
+  onAddText,
+  onGenerate,
+  generating,
+  diagramName,
+  nodes,
+  edges,
+}: Props) {
   const [prompt, setPrompt] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [tokenLoading, setTokenLoading] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
   const [tokenForm] = Form.useForm();
+  const [sqlModalOpen, setSqlModalOpen] = useState(false);
+  const [sqlDialect, setSqlDialect] = useState<SqlDialect>("mysql");
 
   async function validateOpenAIToken(token: string): Promise<boolean> {
     try {
@@ -72,6 +92,18 @@ export function SidebarConstructor({ onAddEntity, onAddNote, onAddSection, onAdd
     }
 
     onGenerate?.(prompt);
+  }
+
+  function handleExportSql(dialect: SqlDialect) {
+    const tableCount = nodes.filter((node) => node.type === "entityNode").length;
+
+    if (tableCount === 0) {
+      messageApi.warning("Adicione ao menos uma entidade antes de exportar.");
+      return;
+    }
+
+    setSqlDialect(dialect);
+    setSqlModalOpen(true);
   }
 
   async function handleSaveToken(values: { openaiToken: string }) {
@@ -221,19 +253,68 @@ export function SidebarConstructor({ onAddEntity, onAddNote, onAddSection, onAdd
 
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
+          paddingTop: 20,
+          borderBottom: "1px solid #e5e7eb",
+          paddingBottom: 20,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            paddingBottom: 10,
+          }}
+        >
+          <DatabaseOutlined style={{ color: "#fa8c16", fontSize: 16 }} />
+          <span style={{ fontWeight: "bold" }}>ER</span>
+        </div>
+
+        <div style={nodeStyle} onClick={onAddEntity}>
+          Adicionar Entidade
+        </div>
+      </div>
+
+      <div
+        style={{
           paddingTop: 20,
           paddingBottom: 10,
         }}
       >
-        <DatabaseOutlined style={{ color: "#fa8c16", fontSize: 16 }} />
-        <span style={{ fontWeight: "bold" }}>ER</span>
-      </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            paddingBottom: 10,
+          }}
+        >
+          <ExportOutlined style={{ color: "#1677ff", fontSize: 16 }} />
+          <span style={{ fontWeight: "bold" }}>Export</span>
+        </div>
 
-      <div style={nodeStyle} onClick={onAddEntity}>
-        Adicionar Entidade
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, 1fr)",
+            gap: 6,
+          }}
+        >
+          <Button
+            block
+            title="Exportar para MySQL"
+            style={{ height: 60 }}
+            onClick={() => handleExportSql("mysql")}
+            icon={<SiMysql style={{ fontSize: 50, color: "#00758F" }} />}
+          />
+          <Button
+            block
+            title="Exportar para PostgreSQL"
+            style={{ height: 60 }}
+            onClick={() => handleExportSql("postgres")}
+            icon={<SiPostgresql style={{ fontSize: 40, color: "#336791" }} />}
+          />
+        </div>
       </div>
 
       <Modal
@@ -271,6 +352,16 @@ export function SidebarConstructor({ onAddEntity, onAddNote, onAddSection, onAdd
           </div>
         </Form>
       </Modal>
+
+      <SqlExportModal
+        open={sqlModalOpen}
+        onClose={() => setSqlModalOpen(false)}
+        dialect={sqlDialect}
+        onDialectChange={setSqlDialect}
+        diagramName={diagramName}
+        nodes={nodes}
+        edges={edges}
+      />
     </aside>
   );
 }
