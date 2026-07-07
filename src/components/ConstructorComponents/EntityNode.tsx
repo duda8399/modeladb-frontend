@@ -132,16 +132,43 @@ export default memo(function EntityNode({ id, data, onBeforeDelete }: Props) {
               style={{
                 padding: "6px 8px",
                 borderRight: "1px solid #f0f0f0",
+                minWidth: 0,
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  minWidth: 0,
+                }}
+              >
                 {field.pk && <KeyOutlined style={{ color: "#faad14" }} />}
                 {field.fk && <FkIcon />}
-                <span>{field.name || "-"}</span>
+                <span
+                  title={field.name || "-"}
+                  style={{
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    minWidth: 0,
+                  }}
+                >
+                  {field.name || "-"}
+                </span>
               </div>
             </Col>
 
-            <Col span={12} style={{ padding: "6px 8px" }}>
+            <Col
+              span={12}
+              style={{
+                padding: "6px 8px",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              title={field.type ?? undefined}
+            >
               {field.type}
             </Col>
           </Row>

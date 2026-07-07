@@ -465,7 +465,7 @@ const ConstructorPage: React.FC = () => {
     [],
   );
 
-  const captureThumbnail = async (): Promise<string | undefined> => {
+  const captureThumbnail = async (): Promise<Blob | undefined> => {
     if (!reactFlowContainerRef.current) return undefined;
 
     try {
@@ -503,14 +503,7 @@ const ConstructorPage: React.FC = () => {
         canvas.toBlob(resolve, "image/jpeg", 0.4),
       );
 
-      if (!blob) return undefined;
-
-      return await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
+      return blob ?? undefined;
     } catch {
       return undefined;
     }
@@ -522,8 +515,6 @@ const ConstructorPage: React.FC = () => {
     setSaving(true);
 
     try {
-      const thumbnail = await captureThumbnail();
-
       await api.put(`/diagram/${id}`, {
         name: diagramName,
         nodes: nodes.map((node) => ({
@@ -545,8 +536,15 @@ const ConstructorPage: React.FC = () => {
           type: edge.type || "floating",
           data: edge.data,
         })),
-        ...(thumbnail ? { thumbnail } : {}),
       });
+
+      const thumbnail = await captureThumbnail();
+
+      if (thumbnail) {
+        const formData = new FormData();
+        formData.append("thumbnail", thumbnail, "thumbnail.jpg");
+        await api.put(`/diagram/${id}/thumbnail`, formData);
+      }
 
       messageApi.success("Diagrama salvo com sucesso");
     } catch (error: any) {
