@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Alert, Modal, Segmented, message } from "antd";
-import { DownloadOutlined } from "@ant-design/icons";
+import { Alert, Button, Modal, Segmented, message } from "antd";
+import { CopyOutlined, DownloadOutlined } from "@ant-design/icons";
 import CodeMirror from "@uiw/react-codemirror";
 import { sql, MySQL, PostgreSQL } from "@codemirror/lang-sql";
 import { EditorView } from "@codemirror/view";
@@ -38,15 +38,24 @@ export function SqlExportModal({
   useEffect(() => {
     if (!open) return;
 
-    const generated = generateSqlScript(nodes, edges, dialect);
+    const generated = generateSqlScript(nodes, edges, dialect, diagramName);
     setScript(generated.sql);
     setSkippedFields(generated.skippedFields);
-  }, [open, dialect, nodes, edges]);
+  }, [open, dialect, nodes, edges, diagramName]);
 
   const handleDownload = () => {
     const suffix = dialect === "mysql" ? "mysql" : "postgres";
     downloadTextFile(`${diagramName || "diagrama"}_${suffix}.sql`, script);
     messageApi.success("Script SQL exportado com sucesso!");
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(script);
+      messageApi.success("Script SQL copiado para a área de transferência!");
+    } catch {
+      messageApi.error("Não foi possível copiar o script.");
+    }
   };
 
   const hasTables = nodes.some((node) => node.type === "entityNode");
@@ -59,14 +68,22 @@ export function SqlExportModal({
       width={800}
       height={400}
       okText="Baixar .sql"
-      okButtonProps={{ icon: <DownloadOutlined /> }}
+      okButtonProps={{ icon: <DownloadOutlined />, disabled: !hasTables }}
       onOk={handleDownload}
       cancelText="Fechar"
       destroyOnHidden
     >
       {contextHolder}
 
-      <div style={{ display: "flex", justifyContent: "center", paddingBottom: 16 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          position: "relative",
+          paddingBottom: 16,
+        }}
+      >
         <Segmented
           value={dialect}
           onChange={(value) => onDialectChange(value as SqlDialect)}
@@ -75,6 +92,14 @@ export function SqlExportModal({
             { label: "PostgreSQL", value: "postgres" },
           ]}
         />
+        <Button
+          icon={<CopyOutlined />}
+          onClick={handleCopy}
+          disabled={!hasTables}
+          style={{ position: "absolute", right: 0 }}
+        >
+          Copiar
+        </Button>
       </div>
 
       {skippedFields > 0 && (

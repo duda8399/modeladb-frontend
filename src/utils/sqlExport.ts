@@ -45,12 +45,26 @@ const PG_SERIAL_MAP: Record<string, string> = {
   BIGINT: "BIGSERIAL",
 };
 
+function stripDiacritics(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function sanitizeIdentifier(name: string, fallback = "coluna"): string {
+  const sanitized = stripDiacritics(name).replace(/[^a-zA-Z0-9_]/g, "_");
+  return sanitized || fallback;
+}
+
 function quote(identifier: string, dialect: SqlDialect): string {
-  return dialect === "mysql" ? `\`${identifier}\`` : `"${identifier}"`;
+  const safe = sanitizeIdentifier(identifier);
+  return dialect === "mysql" ? `\`${safe}\`` : `"${safe}"`;
 }
 
 function sanitizeConstraintName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_]/g, "_");
+  return sanitizeIdentifier(name, "fk");
+}
+
+function sanitizeDatabaseName(name: string): string {
+  return sanitizeIdentifier(name.trim(), "modeladb");
 }
 
 function formatMySqlType(type: string): string {
@@ -209,6 +223,7 @@ export type SqlBlocksResult = {
   header: string;
   footer: string;
   blocks: SqlBlock[];
+  foreignKeyStatements: string[];
   skippedFields: number;
 };
 
@@ -226,6 +241,7 @@ export function generateSqlBlocks(
   nodes: CustomNode[],
   edges: CustomEdge[],
   dialect: SqlDialect,
+  databaseName?: string,
 ): SqlBlocksResult {
   const entityNodes = nodes.filter((node) => node.type === "entityNode");
   const foreignKeys = resolveForeignKeys(entityNodes, edges);
@@ -240,38 +256,43 @@ export function generateSqlBlocks(
     const createStatement = buildCreateTable(node, dialect);
     if (!createStatement) continue;
 
-    const ownFkStatements = foreignKeys
-      .filter((fk) => fk.tableNodeId === node.id)
-      .map((fk) => buildFkStatement(fk, dialect));
-
     blocks.push({
       key: node.id,
       title: getTableName(node),
-      sql: [createStatement, ...ownFkStatements].join("\n\n"),
+      sql: createStatement,
     });
   }
 
+  // As tabelas referenciadas por uma FK só existem depois que todos os
+  // CREATE TABLE forem executados, então as constraints são emitidas à parte.
+  const foreignKeyStatements = foreignKeys.map((fk) => buildFkStatement(fk, dialect));
+
+  const dbName = sanitizeDatabaseName(databaseName || "modeladb");
+
   const header =
     dialect === "mysql"
-      ? "-- Gerado pelo ModelaDB\nSET FOREIGN_KEY_CHECKS=0;\n\n"
-      : "-- Gerado pelo ModelaDB\n\n";
+      ? `-- Gerado pelo ModelaDB\nCREATE DATABASE IF NOT EXISTS \`${dbName}\`;\nUSE \`${dbName}\`;\nSET FOREIGN_KEY_CHECKS=0;\n\n`
+      : `-- Gerado pelo ModelaDB\n-- O PostgreSQL não permite criar um banco e usá-lo na mesma sessão.\n-- Após criar o banco, conecte-se a ele antes de rodar o restante do script.\n-- Se estiver usando o psql, use o comando: \\c ${dbName}\nCREATE DATABASE "${dbName}";\n\n`;
   const footer = dialect === "mysql" ? "\n\nSET FOREIGN_KEY_CHECKS=1;\n" : "\n";
 
-  return { header, footer, blocks, skippedFields };
+  return { header, footer, blocks, foreignKeyStatements, skippedFields };
 }
 
 export function generateSqlScript(
   nodes: CustomNode[],
   edges: CustomEdge[],
   dialect: SqlDialect,
+  databaseName?: string,
 ): { sql: string; skippedFields: number } {
-  const { header, footer, blocks, skippedFields } = generateSqlBlocks(
-    nodes,
-    edges,
-    dialect,
-  );
+  const { header, footer, blocks, foreignKeyStatements, skippedFields } =
+    generateSqlBlocks(nodes, edges, dialect, databaseName);
 
-  const sql = header + blocks.map((block) => block.sql).join("\n\n") + footer;
+  const sections = [
+    blocks.map((block) => block.sql).join("\n\n"),
+    ...(foreignKeyStatements.length ? [foreignKeyStatements.join("\n\n")] : []),
+  ];
+
+  const sql = header + sections.join("\n\n") + footer;
 
   return { sql, skippedFields };
 }
