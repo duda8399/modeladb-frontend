@@ -1,9 +1,9 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { Card, Row, Col, Button, Input } from "antd";
 import { CloseOutlined, KeyOutlined } from "@ant-design/icons";
 import AttributesModal from "./AttributesModal";
 import DeleteModal from "./DeleteModal";
-import { Handle, Position, useReactFlow } from "reactflow";
+import { Handle, Position } from "reactflow";
 import type { Field } from "../../types/diagramER";
 import { FkIcon } from "./FieldIcons";
 
@@ -13,32 +13,29 @@ interface Props {
     fields?: Field[];
     name?: string;
   };
-  onBeforeDelete?: () => void;
+  onDelete?: () => void;
+  onRename?: (value: string) => void;
+  onFieldsChange?: (fields: Field[]) => void;
 }
 
-export default memo(function EntityNode({ id, data, onBeforeDelete }: Props) {
-  const { setNodes } = useReactFlow();
+export default memo(function EntityNode({
+  data,
+  onDelete,
+  onRename,
+  onFieldsChange,
+}: Props) {
   const fields = data.fields || [];
   const [open, setOpen] = useState(false);
   const [openDelete, setOpenDelete] = useState(false);
-  const [entityName, setEntityName] = useState((data as any).name || "Entidade");
+  const [entityName, setEntityName] = useState(data.name || "Entidade");
+  const [isEditingName, setIsEditingName] = useState(false);
 
-  const updateFields = (newFields: Field[]) => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === id) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              fields: newFields,
-            },
-          };
-        }
-        return node;
-      }),
-    );
-  };
+  useEffect(() => {
+    if (!isEditingName) {
+      setEntityName(data.name || "Entidade");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.name]);
 
   return (
     <>
@@ -50,17 +47,14 @@ export default memo(function EntityNode({ id, data, onBeforeDelete }: Props) {
             Tem certeza que deseja excluir a entidade <b>{entityName}</b>?
           </span>
         }
-        onConfirm={() => {
-          onBeforeDelete?.();
-          setNodes((nds) => nds.filter((node) => node.id !== id));
-        }}
+        onConfirm={() => onDelete?.()}
       />
 
       <AttributesModal
         open={open}
         setOpen={setOpen}
         fields={fields}
-        setFields={updateFields}
+        setFields={(newFields) => onFieldsChange?.(newFields)}
       />
 
       <Card
@@ -84,24 +78,15 @@ export default memo(function EntityNode({ id, data, onBeforeDelete }: Props) {
           >
             <Input
               value={entityName}
-              onChange={(e: any) => {
-                const value = e.target.value;
-                setEntityName(value);
-                setNodes((nds) =>
-                  nds.map((node) => {
-                    if (node.id === id) {
-                      return {
-                        ...node,
-                        data: {
-                          ...node.data,
-                          name: value,
-                        },
-                      };
-                    }
-                    return node;
-                  }),
-                );
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setEntityName(e.target.value)
+              }
+              onFocus={() => setIsEditingName(true)}
+              onBlur={() => {
+                setIsEditingName(false);
+                onRename?.(entityName);
               }}
+              onPressEnter={(e) => (e.target as HTMLInputElement).blur()}
               size="small"
               style={{
                 fontWeight: "bold",

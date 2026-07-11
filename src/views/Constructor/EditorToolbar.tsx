@@ -83,6 +83,7 @@ interface EditorToolbarProps {
   canUndo: boolean;
   canRedo: boolean;
   onBeforeImportReplace: () => void;
+  onPatchSelectedTextNodes: (patch: Record<string, unknown>) => void;
   bgColorActive: boolean;
   bgColor: string;
   onBgColorChange: (color: string) => void;
@@ -102,6 +103,7 @@ export function EditorToolbar({
   canUndo,
   canRedo,
   onBeforeImportReplace,
+  onPatchSelectedTextNodes,
   bgColorActive,
   bgColor,
   onBgColorChange,
@@ -174,13 +176,7 @@ export function EditorToolbar({
   }, [selectedNodeId]);
 
   const updateTextNodes = (patch: Record<string, unknown>) => {
-    setNodes((nds) =>
-      nds.map((n) =>
-        n.selected && (n.type === "textNode" || n.type === "noteNode")
-          ? { ...n, data: { ...n.data, ...patch } }
-          : n,
-      ),
-    );
+    onPatchSelectedTextNodes(patch);
   };
 
   const currentFont = activeFont ?? ((firstData?.fontFamily as string));

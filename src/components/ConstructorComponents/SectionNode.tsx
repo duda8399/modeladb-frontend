@@ -6,10 +6,10 @@ type SectionNodeProps = {
   data: { label: string; bgColor?: string };
   selected: boolean;
   id: string;
-  onBeforeDelete?: () => void;
+  onDelete?: () => void;
 };
 
-const SectionNode = ({ data, selected, id, onBeforeDelete }: SectionNodeProps) => {
+const SectionNode = ({ data, selected, id, onDelete }: SectionNodeProps) => {
   const { setNodes } = useReactFlow();
 
   const handleLabelChange = useCallback(
@@ -24,9 +24,8 @@ const SectionNode = ({ data, selected, id, onBeforeDelete }: SectionNodeProps) =
   );
 
   const handleDelete = useCallback(() => {
-    onBeforeDelete?.();
-    setNodes((nds) => nds.filter((n) => n.id !== id));
-  }, [id, onBeforeDelete, setNodes]);
+    onDelete?.();
+  }, [onDelete]);
 
   return (
     <div

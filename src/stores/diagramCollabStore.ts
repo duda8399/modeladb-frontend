@@ -136,6 +136,7 @@ interface DiagramCollabState {
   applyOperation: (op: Operation, saveHistory?: boolean) => void;
   undo: (userId: string) => Operation | null;
   redo: (userId: string) => Operation | null;
+  patchNodeData: (nodeId: string, patch: Record<string, unknown>) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   compactDocument: () => { nodes: any[]; edges: any[] };
   getNode: (nodeId: string) => CollabNode | undefined;
@@ -632,6 +633,13 @@ export const useDiagramCollabStore = create<DiagramCollabState>()((set, get) => 
     get().applyOperation(redoOp, true);
 
     return redoOp;
+  },
+
+  patchNodeData: (nodeId, patch) => {
+    updateNodeById(get, set, nodeId, (node) => ({
+      ...node,
+      data: { ...node.data, ...patch },
+    }));
   },
 
   compactDocument: () => {

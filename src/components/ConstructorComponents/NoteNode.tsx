@@ -16,7 +16,7 @@ type NoteNodeProps = {
   };
   selected: boolean;
   id: string;
-  onBeforeDelete?: () => void;
+  onDelete?: () => void;
 };
 
 function toHtml(text: string): string {
@@ -29,7 +29,7 @@ function toHtml(text: string): string {
     .replace(/\n/g, "<br>");
 }
 
-const NoteNode = ({ data, selected, id, onBeforeDelete }: NoteNodeProps) => {
+const NoteNode = ({ data, selected, id, onDelete }: NoteNodeProps) => {
   const { setNodes } = useReactFlow();
   const editableRef = useRef<HTMLDivElement>(null);
   const [isFocused, setIsFocused] = useState(false);
@@ -78,9 +78,8 @@ const NoteNode = ({ data, selected, id, onBeforeDelete }: NoteNodeProps) => {
   }, []);
 
   const handleDelete = useCallback(() => {
-    onBeforeDelete?.();
-    setNodes((nds) => nds.filter((n) => n.id !== id));
-  }, [id, onBeforeDelete, setNodes]);
+    onDelete?.();
+  }, [onDelete]);
 
   const isEmpty = !data.text || data.text === "" || data.text === "<br>";
 

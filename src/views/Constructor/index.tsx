@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import html2canvas from "html2canvas";
 import "reactflow/dist/style.css";
 import {
@@ -6,7 +14,6 @@ import {
   Controls,
   MiniMap,
   ReactFlow,
-  addEdge,
   useEdgesState,
   useNodesState,
   ConnectionMode,
@@ -30,20 +37,28 @@ import FloatingEdge from "../../components/ConstructorComponents/FloatingEdge";
 import type {
   CustomEdge,
   CustomNode,
+  Field,
   RemoveEdgeData,
 } from "../../types/diagramER";
 import { useParams } from "react-router-dom";
 import { api } from "../../services/api";
-import { getToken } from "../../utils/auth";
+import { getCurrentUser, getToken } from "../../utils/auth";
+import realtimeService from "../../services/realtimeService";
+import {
+  useDiagramCollabStore,
+  selectVisibleNodes,
+  selectVisibleEdges,
+  type CollabNode,
+  type CollabEdge,
+  type CollabField,
+  type OperationDraft,
+} from "../../stores/diagramCollabStore";
 
-type DiagramSnapshot = {
-  nodes: CustomNode[];
-  edges: CustomEdge[];
-  diagramName: string;
-};
-
-const cloneSnapshot = (snapshot: DiagramSnapshot): DiagramSnapshot =>
-  structuredClone(snapshot);
+function toRenderedFields(fields?: CollabField[]): Field[] {
+  return (fields || [])
+    .filter((f) => !f.deleted)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+}
 
 const ConstructorPage: React.FC = () => {
   const { id } = useParams();
@@ -61,106 +76,283 @@ const ConstructorPage: React.FC = () => {
   const [diagramName, setDiagramName] = useState("");
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [canUndo, setCanUndo] = useState(false);
-  const [canRedo, setCanRedo] = useState(false);
   const [bgColorMode, setBgColorMode] = useState(false);
   const [currentBgColor, setCurrentBgColor] = useState("#63b3ed");
   const reactFlowContainerRef = useRef<HTMLDivElement>(null);
-  const pastHistoryRef = useRef<DiagramSnapshot[]>([]);
-  const futureHistoryRef = useRef<DiagramSnapshot[]>([]);
-  const currentSnapshotRef = useRef<DiagramSnapshot>({
-    nodes: [],
-    edges: [],
-    diagramName: "",
-  });
+  const dragStartPositionsRef = useRef<Record<string, { x: number; y: number }>>(
+    {},
+  );
 
-  useEffect(() => {
-    currentSnapshotRef.current = cloneSnapshot({
-      nodes,
-      edges,
-      diagramName,
+  const userId = getCurrentUser()?.id ?? "";
+  const canUndo = useDiagramCollabStore((s) => s.undoStack.length > 0);
+  const canRedo = useDiagramCollabStore((s) => s.redoStack.length > 0);
+
+  const syncFromStore = useCallback(() => {
+    const state = useDiagramCollabStore.getState();
+    const visibleNodes = selectVisibleNodes(state);
+    const visibleEdges = selectVisibleEdges(state);
+
+    setNodes((current) => {
+      const byId = new Map(current.map((n) => [n.id, n]));
+
+      return visibleNodes.map((storeNode) => {
+        const local = byId.get(storeNode.id);
+
+        return {
+          ...(local || {}),
+          id: storeNode.id,
+          type: storeNode.type,
+          position: storeNode.position,
+          style: storeNode.style,
+          data: {
+            ...storeNode.data,
+            ...(storeNode.data.fields !== undefined
+              ? { fields: toRenderedFields(storeNode.data.fields) }
+              : {}),
+          },
+        } as CustomNode;
+      });
     });
-  }, [diagramName, edges, nodes]);
 
-  const syncHistoryAvailability = useCallback(() => {
-    setCanUndo(pastHistoryRef.current.length > 0);
-    setCanRedo(futureHistoryRef.current.length > 0);
-  }, []);
+    setEdges((current) => {
+      const byId = new Map(current.map((e) => [e.id, e]));
 
-  const createSnapshot = useCallback(
-    (): DiagramSnapshot => cloneSnapshot(currentSnapshotRef.current),
-    [],
+      return visibleEdges.map((storeEdge) => {
+        const local = byId.get(storeEdge.id);
+
+        return {
+          ...(local || {}),
+          id: storeEdge.id,
+          source: storeEdge.source,
+          sourceHandle: storeEdge.sourceHandle,
+          target: storeEdge.target,
+          label: storeEdge.label,
+          type: storeEdge.type,
+          data: storeEdge.data,
+        } as CustomEdge;
+      });
+    });
+  }, [setEdges, setNodes]);
+
+  const sendOp = useCallback(
+    (draft: OperationDraft) => {
+      if (!userId) return;
+
+      const op = useDiagramCollabStore.getState().stampOperation(draft, userId);
+      useDiagramCollabStore.getState().applyOperation(op);
+      realtimeService.sendOperation(op);
+      syncFromStore();
+    },
+    [userId, syncFromStore],
   );
 
-  const captureHistory = useCallback(() => {
-    pastHistoryRef.current.push(createSnapshot());
-    futureHistoryRef.current = [];
-    syncHistoryAvailability();
-  }, [createSnapshot, syncHistoryAvailability]);
+  const deleteEdgeWithCascade = useCallback(
+    (edgeId: string) => {
+      const edge = useDiagramCollabStore.getState().getEdge(edgeId);
+      if (!edge) return;
 
-  const EntityNodeWithHistory = useCallback(
-    (props: any) => <EntityNode {...props} onBeforeDelete={captureHistory} />,
-    [captureHistory],
+      // junctionId is the real signal of "this edge belongs to an N:N pairing" —
+      // both edges around a junction are tagged relationType "1:N", not "N:N".
+      if (edge.data?.junctionId) {
+        const junctionId = edge.data.junctionId;
+        const siblingEdges = useDiagramCollabStore
+          .getState()
+          .edges.filter(
+            (e) =>
+              !e.data?.deleted &&
+              e.id !== edgeId &&
+              (e.source === junctionId || e.target === junctionId),
+          );
+
+        siblingEdges.forEach((sibling) =>
+          sendOp({ type: "DELETE_EDGE", targetId: sibling.id }),
+        );
+        sendOp({ type: "DELETE_EDGE", targetId: edgeId });
+        sendOp({ type: "DELETE_NODE", targetId: junctionId });
+        return;
+      }
+
+      if (
+        edge.data?.relationType === "1:1" ||
+        edge.data?.relationType === "1:N"
+      ) {
+        const targetNodeId = edge.data?.targetNodeId ?? edge.target;
+        const sourceNodeId = edge.data?.sourceNodeId ?? edge.source;
+        const targetNode = useDiagramCollabStore.getState().getNode(targetNodeId);
+        const sourceNode = useDiagramCollabStore.getState().getNode(sourceNodeId);
+        const sourceName = sourceNode?.data.name || sourceNodeId;
+        const fkFieldName = edge.data?.fkFieldName;
+
+        const fkField = (targetNode?.data.fields || []).find(
+          (f) =>
+            !f.deleted &&
+            f.fk &&
+            (fkFieldName ? f.name === fkFieldName : f.name === `fk_${sourceName}_id`),
+        );
+
+        if (fkField && targetNode) {
+          sendOp({
+            type: "REMOVE_FIELD",
+            targetId: targetNode.id,
+            payload: { fieldId: fkField.id },
+          });
+        }
+      }
+
+      sendOp({ type: "DELETE_EDGE", targetId: edgeId });
+    },
+    [sendOp],
   );
-  const NoteNodeWithHistory = useCallback(
-    (props: any) => <NoteNode {...props} onBeforeDelete={captureHistory} />,
-    [captureHistory],
+
+  const deleteNodeWithCascade = useCallback(
+    (nodeId: string) => {
+      const connectedEdges = useDiagramCollabStore
+        .getState()
+        .edges.filter(
+          (e) => !e.data?.deleted && (e.source === nodeId || e.target === nodeId),
+        );
+
+      connectedEdges.forEach((edge) => deleteEdgeWithCascade(edge.id));
+      sendOp({ type: "DELETE_NODE", targetId: nodeId });
+    },
+    [deleteEdgeWithCascade, sendOp],
   );
-  const SectionNodeWithHistory = useCallback(
-    (props: any) => <SectionNode {...props} onBeforeDelete={captureHistory} />,
-    [captureHistory],
+
+  const renameEntity = useCallback(
+    (nodeId: string, value: string) => {
+      const node = useDiagramCollabStore.getState().getNode(nodeId);
+      if (!node || node.data.name === value) return;
+
+      sendOp({
+        type: "SET_NODE_NAME",
+        targetId: nodeId,
+        payload: { value },
+        previousValue: node.data.name,
+      });
+    },
+    [sendOp],
   );
-  const TextNodeWithHistory = useCallback(
-    (props: any) => <TextNode {...props} onBeforeDelete={captureHistory} />,
-    [captureHistory],
+
+  const onFieldsChange = useCallback(
+    (nodeId: string, newFields: Field[]) => {
+      const node = useDiagramCollabStore.getState().getNode(nodeId);
+      if (!node) return;
+
+      const oldFields = (node.data.fields || []) as CollabField[];
+      const newById = new Map(newFields.map((f) => [f.id, f]));
+      const oldById = new Map(oldFields.map((f) => [f.id, f]));
+
+      oldFields.forEach((f) => {
+        if (!newById.has(f.id)) {
+          sendOp({
+            type: "REMOVE_FIELD",
+            targetId: nodeId,
+            payload: { fieldId: f.id },
+          });
+        }
+      });
+
+      newFields.forEach((f, index) => {
+        const old = oldById.get(f.id);
+
+        if (!old) {
+          sendOp({
+            type: "ADD_FIELD",
+            targetId: nodeId,
+            payload: { ...f, order: index },
+          });
+          return;
+        }
+
+        (Object.keys(f) as (keyof Field)[]).forEach((key) => {
+          if (key === "id") return;
+          if (old[key] !== f[key]) {
+            sendOp({
+              type: "SET_FIELD_PROP",
+              targetId: nodeId,
+              payload: { fieldId: f.id, key, value: f[key] },
+              previousValue: old[key],
+            });
+          }
+        });
+
+        const oldIndex = oldFields.findIndex((of) => of.id === f.id);
+        const oldOrder = old.order ?? oldIndex;
+
+        if (oldOrder !== index) {
+          sendOp({
+            type: "SET_FIELD_ORDER",
+            targetId: nodeId,
+            payload: { fieldId: f.id, order: index },
+            previousValue: oldOrder,
+          });
+        }
+      });
+    },
+    [sendOp],
+  );
+
+  const EntityNodeConnected = useCallback(
+    (props: any) => (
+      <EntityNode
+        {...props}
+        onDelete={() => deleteNodeWithCascade(props.id)}
+        onRename={(value: string) => renameEntity(props.id, value)}
+        onFieldsChange={(fields: Field[]) => onFieldsChange(props.id, fields)}
+      />
+    ),
+    [deleteNodeWithCascade, renameEntity, onFieldsChange],
+  );
+  const NoteNodeConnected = useCallback(
+    (props: any) => (
+      <NoteNode {...props} onDelete={() => deleteNodeWithCascade(props.id)} />
+    ),
+    [deleteNodeWithCascade],
+  );
+  const SectionNodeConnected = useCallback(
+    (props: any) => (
+      <SectionNode {...props} onDelete={() => deleteNodeWithCascade(props.id)} />
+    ),
+    [deleteNodeWithCascade],
+  );
+  const TextNodeConnected = useCallback(
+    (props: any) => (
+      <TextNode {...props} onDelete={() => deleteNodeWithCascade(props.id)} />
+    ),
+    [deleteNodeWithCascade],
   );
   const nodeTypes = useMemo(
     () => ({
-      entityNode: EntityNodeWithHistory,
-      noteNode: NoteNodeWithHistory,
-      sectionNode: SectionNodeWithHistory,
-      textNode: TextNodeWithHistory,
+      entityNode: EntityNodeConnected,
+      noteNode: NoteNodeConnected,
+      sectionNode: SectionNodeConnected,
+      textNode: TextNodeConnected,
     }),
     [
-      EntityNodeWithHistory,
-      NoteNodeWithHistory,
-      SectionNodeWithHistory,
-      TextNodeWithHistory,
+      EntityNodeConnected,
+      NoteNodeConnected,
+      SectionNodeConnected,
+      TextNodeConnected,
     ],
   );
 
   const edgeTypes = useMemo(() => ({ floating: FloatingEdge }), []);
 
-  const applySnapshot = useCallback(
-    (snapshot: DiagramSnapshot) => {
-      setDiagramName(snapshot.diagramName);
-      setNodes(snapshot.nodes);
-      setEdges(snapshot.edges);
-    },
-    [setEdges, setNodes],
-  );
-
   const handleUndo = useCallback(() => {
-    const previous = pastHistoryRef.current.pop();
-    if (!previous) return;
-
-    const current = createSnapshot();
-
-    futureHistoryRef.current.unshift(current);
-    applySnapshot(previous);
-    syncHistoryAvailability();
-  }, [applySnapshot, createSnapshot, syncHistoryAvailability]);
+    const op = useDiagramCollabStore.getState().undo(userId);
+    if (op) {
+      realtimeService.sendOperation(op);
+      syncFromStore();
+    }
+  }, [userId, syncFromStore]);
 
   const handleRedo = useCallback(() => {
-    const next = futureHistoryRef.current.shift();
-    if (!next) return;
-
-    const current = createSnapshot();
-
-    pastHistoryRef.current.push(current);
-    applySnapshot(next);
-    syncHistoryAvailability();
-  }, [applySnapshot, createSnapshot, syncHistoryAvailability]);
+    const op = useDiagramCollabStore.getState().redo(userId);
+    if (op) {
+      realtimeService.sendOperation(op);
+      syncFromStore();
+    }
+  }, [userId, syncFromStore]);
 
   useEffect(() => {
     const loadDiagram = async () => {
@@ -200,9 +392,26 @@ const ConstructorPage: React.FC = () => {
         setDiagramName(loadedName);
         setNodes(loadedNodes);
         setEdges(loadedEdges);
-        pastHistoryRef.current = [];
-        futureHistoryRef.current = [];
-        syncHistoryAvailability();
+
+        useDiagramCollabStore
+          .getState()
+          .loadDocument(loadedNodes as CollabNode[], loadedEdges as CollabEdge[]);
+
+        const token = getToken();
+
+        if (token && userId) {
+          realtimeService.connect({
+            diagramId: id,
+            token,
+            onOperation: (operation) => {
+              useDiagramCollabStore.getState().applyOperation(operation);
+              syncFromStore();
+            },
+            onPresence: () => {},
+            onCursor: () => {},
+            onError: (error) => messageApi.error(error.message),
+          });
+        }
       } catch (error: any) {
         const errorMessage = error?.response?.data?.message;
         messageApi.error(
@@ -212,7 +421,12 @@ const ConstructorPage: React.FC = () => {
     };
 
     loadDiagram();
-  }, [id, messageApi, setEdges, setNodes, syncHistoryAvailability]);
+
+    return () => {
+      realtimeService.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   const onConnect = useCallback((params: Connection) => {
     setPendingConnection(params);
@@ -222,16 +436,14 @@ const ConstructorPage: React.FC = () => {
   const onSelectRelationType = (relationType: "1:1" | "1:N" | "N:N") => {
     if (!pendingConnection) return;
 
-    captureHistory();
+    const targetNodeId = pendingConnection.target as string;
+    const sourceNodeId = pendingConnection.source as string;
 
-    const targetNodeId = pendingConnection.target;
-    const sourceNodeId = pendingConnection.source;
+    const sourceNode = useDiagramCollabStore.getState().getNode(sourceNodeId);
+    const targetNode = useDiagramCollabStore.getState().getNode(targetNodeId);
 
-    const sourceNode = nodes.find((n) => n.id === sourceNodeId);
-    const targetNode = nodes.find((n) => n.id === targetNodeId);
-
-    const sourceName = (sourceNode?.data as any)?.name || sourceNodeId;
-    const targetName = (targetNode?.data as any)?.name || targetNodeId;
+    const sourceName = sourceNode?.data.name || sourceNodeId;
+    const targetName = targetNode?.data.name || targetNodeId;
 
     if (relationType === "N:N") {
       const junctionId = crypto.randomUUID();
@@ -245,6 +457,7 @@ const ConstructorPage: React.FC = () => {
         notNull: true,
         unique: false,
         ai: false,
+        order: 0,
       };
 
       const fkFieldTarget = {
@@ -256,14 +469,15 @@ const ConstructorPage: React.FC = () => {
         notNull: true,
         unique: false,
         ai: false,
+        order: 1,
       };
 
-      const sx = (sourceNode?.position as any)?.x ?? 250;
-      const sy = (sourceNode?.position as any)?.y ?? 150;
-      const tx = (targetNode?.position as any)?.x ?? 250;
-      const ty = (targetNode?.position as any)?.y ?? 150;
+      const sx = sourceNode?.position.x ?? 250;
+      const sy = sourceNode?.position.y ?? 150;
+      const tx = targetNode?.position.x ?? 250;
+      const ty = targetNode?.position.y ?? 150;
 
-      const junctionNode: CustomNode = {
+      const junctionNode = {
         id: junctionId,
         type: "entityNode",
         position: {
@@ -276,80 +490,72 @@ const ConstructorPage: React.FC = () => {
         },
       };
 
-      setNodes((nds) => [...nds, junctionNode]);
+      sendOp({ type: "ADD_NODE", targetId: junctionId, payload: junctionNode });
 
-      const edge1: CustomEdge = {
+      const edge1 = {
         id: crypto.randomUUID(),
-        source: sourceNodeId as string,
+        source: sourceNodeId,
         target: junctionId,
         label: "1:N",
         type: "floating",
         data: {
-          relationType: "1:N",
-          sourceNodeId: sourceNodeId as string,
-          targetNodeId: targetNodeId as string,
+          relationType: "1:N" as const,
+          sourceNodeId,
+          targetNodeId,
           junctionId,
         },
       };
 
-      const edge2: CustomEdge = {
+      const edge2 = {
         id: crypto.randomUUID(),
         source: junctionId,
-        target: targetNodeId as string,
+        target: targetNodeId,
         label: "1:N",
         type: "floating",
         data: {
-          relationType: "1:N",
-          sourceNodeId: sourceNodeId as string,
-          targetNodeId: targetNodeId as string,
+          relationType: "1:N" as const,
+          sourceNodeId,
+          targetNodeId,
           junctionId,
         },
       };
 
-      setEdges((eds) => [...eds, edge1, edge2]);
+      sendOp({ type: "ADD_EDGE", targetId: edge1.id, payload: edge1 });
+      sendOp({ type: "ADD_EDGE", targetId: edge2.id, payload: edge2 });
     } else {
-      setEdges((eds) =>
-        addEdge(
-          {
-            ...pendingConnection,
-            label: relationType,
-            type: "floating",
-            data: {
-              relationType,
-              sourceNodeId: sourceNodeId as string,
-              targetNodeId: targetNodeId as string,
-              fkFieldName: `fk_${sourceName}_id`,
-            },
-          },
-          eds,
-        ),
-      );
+      const edgeId = crypto.randomUUID();
 
-      setNodes((nds) =>
-        nds.map((node) => {
-          if (node.id === targetNodeId) {
-            const newField = {
-              id: crypto.randomUUID(),
-              name: `fk_${sourceName}_id`,
-              type: "INT",
-              pk: false,
-              fk: true,
-              notNull: false,
-              unique: false,
-              ai: false,
-            };
+      const edge = {
+        id: edgeId,
+        source: sourceNodeId,
+        sourceHandle: pendingConnection.sourceHandle ?? undefined,
+        target: targetNodeId,
+        targetHandle: pendingConnection.targetHandle ?? undefined,
+        label: relationType,
+        type: "floating",
+        data: {
+          relationType,
+          sourceNodeId,
+          targetNodeId,
+          fkFieldName: `fk_${sourceName}_id`,
+        },
+      };
 
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                fields: [...((node.data as any).fields || []), newField],
-              },
-            };
-          }
-          return node;
-        }),
-      );
+      sendOp({ type: "ADD_EDGE", targetId: edgeId, payload: edge });
+
+      const newField = {
+        id: crypto.randomUUID(),
+        name: `fk_${sourceName}_id`,
+        type: "INT",
+        pk: false,
+        fk: true,
+        notNull: false,
+        unique: false,
+        ai: false,
+        order: targetNode?.data.fields?.length ?? 0,
+      };
+
+      sendOp({ type: "ADD_FIELD", targetId: targetNodeId, payload: newField });
     }
 
     setPendingConnection(null);
@@ -364,16 +570,25 @@ const ConstructorPage: React.FC = () => {
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: CustomNode) => {
       if (!bgColorMode || node.type !== "sectionNode") return;
-      captureHistory();
-      setNodes((nds) =>
-        nds.map((n) =>
-          n.id === node.id
-            ? { ...n, data: { ...n.data, bgColor: currentBgColor } }
-            : n,
-        ),
-      );
+
+      useDiagramCollabStore
+        .getState()
+        .patchNodeData(node.id, { bgColor: currentBgColor });
+      syncFromStore();
     },
-    [bgColorMode, currentBgColor, captureHistory, setNodes],
+    [bgColorMode, currentBgColor, syncFromStore],
+  );
+
+  const onPatchSelectedTextNodes = useCallback(
+    (patch: Record<string, unknown>) => {
+      nodes.forEach((n) => {
+        if (n.selected && (n.type === "textNode" || n.type === "noteNode")) {
+          useDiagramCollabStore.getState().patchNodeData(n.id, patch);
+        }
+      });
+      syncFromStore();
+    },
+    [nodes, syncFromStore],
   );
 
   const handlePaneClick = useCallback(() => {
@@ -399,49 +614,38 @@ const ConstructorPage: React.FC = () => {
   }, [getNodes, screenToFlowPosition]);
 
   const addTextNode = useCallback(() => {
-    captureHistory();
-
-    const newNode: CustomNode = {
+    const newNode = {
       id: crypto.randomUUID(),
       type: "textNode",
       position: getNewNodePosition(),
       data: { text: "" },
     };
-
-    setNodes((nds) => [...nds, newNode]);
-  }, [captureHistory, setNodes, getNewNodePosition]);
+    sendOp({ type: "ADD_NODE", targetId: newNode.id, payload: newNode });
+  }, [sendOp, getNewNodePosition]);
 
   const addSectionNode = useCallback(() => {
-    captureHistory();
-
-    const newNode: CustomNode = {
+    const newNode = {
       id: crypto.randomUUID(),
       type: "sectionNode",
       position: getNewNodePosition(),
       style: { width: 300, height: 200, zIndex: -1 },
       data: { label: "Seção" },
     };
-
-    setNodes((nds) => [...nds, newNode]);
-  }, [captureHistory, setNodes, getNewNodePosition]);
+    sendOp({ type: "ADD_NODE", targetId: newNode.id, payload: newNode });
+  }, [sendOp, getNewNodePosition]);
 
   const addNoteNode = useCallback(() => {
-    captureHistory();
-
-    const newNode: CustomNode = {
+    const newNode = {
       id: crypto.randomUUID(),
       type: "noteNode",
       position: getNewNodePosition(),
       data: { text: "" },
     };
-
-    setNodes((nds) => [...nds, newNode]);
-  }, [captureHistory, setNodes, getNewNodePosition]);
+    sendOp({ type: "ADD_NODE", targetId: newNode.id, payload: newNode });
+  }, [sendOp, getNewNodePosition]);
 
   const addEntityNode = useCallback(() => {
-    captureHistory();
-
-    const newNode: CustomNode = {
+    const newNode = {
       id: crypto.randomUUID(),
       type: "entityNode",
       position: getNewNodePosition(),
@@ -450,9 +654,38 @@ const ConstructorPage: React.FC = () => {
         fields: [],
       },
     };
+    sendOp({ type: "ADD_NODE", targetId: newNode.id, payload: newNode });
+  }, [sendOp, getNewNodePosition]);
 
-    setNodes((nds) => [...nds, newNode]);
-  }, [captureHistory, setNodes, getNewNodePosition]);
+  const onNodeDragStart = useCallback((_: any, node: CustomNode) => {
+    dragStartPositionsRef.current[node.id] = {
+      x: node.position.x,
+      y: node.position.y,
+    };
+  }, []);
+
+  const onNodeDragStop = useCallback(
+    (_: any, node: CustomNode) => {
+      const previousPosition = dragStartPositionsRef.current[node.id];
+      delete dragStartPositionsRef.current[node.id];
+
+      if (
+        previousPosition &&
+        previousPosition.x === node.position.x &&
+        previousPosition.y === node.position.y
+      ) {
+        return;
+      }
+
+      sendOp({
+        type: "MOVE_NODE",
+        targetId: node.id,
+        payload: { x: node.position.x, y: node.position.y },
+        previousPosition: previousPosition ?? node.position,
+      });
+    },
+    [sendOp],
+  );
 
   const onEdgeMouseEnter = useCallback(
     (event: React.MouseEvent, edge: Edge) => {
@@ -572,10 +805,16 @@ const ConstructorPage: React.FC = () => {
           { headers: { Authorization: `Bearer ${token}` } },
         );
 
-        captureHistory();
+        const generatedNodes = Array.isArray(data?.nodes) ? data.nodes : [];
+        const generatedEdges = Array.isArray(data?.edges) ? data.edges : [];
+
         setDiagramName(data?.diagramName || diagramName);
-        setNodes(Array.isArray(data?.nodes) ? data.nodes : []);
-        setEdges(Array.isArray(data?.edges) ? data.edges : []);
+        setNodes(generatedNodes);
+        setEdges(generatedEdges);
+
+        useDiagramCollabStore
+          .getState()
+          .loadDocument(generatedNodes, generatedEdges);
 
         messageApi.success("Diagrama gerado com sucesso");
       } catch (error: any) {
@@ -585,7 +824,52 @@ const ConstructorPage: React.FC = () => {
         setGenerating(false);
       }
     },
-    [captureHistory, diagramName, edges, messageApi, nodes, setEdges, setNodes],
+    [diagramName, edges, messageApi, nodes, setEdges, setNodes],
+  );
+
+  // Import substitui o diagrama inteiro — não é uma operação CRDT granular,
+  // então não é transmitida em tempo real para outros colaboradores (apenas
+  // reflete localmente e reresseta o histórico de undo/redo, como um "novo documento").
+  const setNodesCompat = useCallback<Dispatch<SetStateAction<CustomNode[]>>>(
+    (updater) => {
+      setNodes((current) => {
+        const next =
+          typeof updater === "function"
+            ? (updater as (n: CustomNode[]) => CustomNode[])(current)
+            : updater;
+
+        useDiagramCollabStore
+          .getState()
+          .loadDocument(
+            next as unknown as CollabNode[],
+            useDiagramCollabStore.getState().edges,
+          );
+
+        return next;
+      });
+    },
+    [setNodes],
+  );
+
+  const setEdgesCompat = useCallback<Dispatch<SetStateAction<CustomEdge[]>>>(
+    (updater) => {
+      setEdges((current) => {
+        const next =
+          typeof updater === "function"
+            ? (updater as (e: CustomEdge[]) => CustomEdge[])(current)
+            : updater;
+
+        useDiagramCollabStore
+          .getState()
+          .loadDocument(
+            useDiagramCollabStore.getState().nodes,
+            next as unknown as CollabEdge[],
+          );
+
+        return next;
+      });
+    },
+    [setEdges],
   );
 
   return (
@@ -612,13 +896,14 @@ const ConstructorPage: React.FC = () => {
         saving={saving}
         nodes={nodes}
         edges={edges}
-        setNodes={setNodes}
-        setEdges={setEdges}
+        setNodes={setNodesCompat}
+        setEdges={setEdgesCompat}
         onUndo={handleUndo}
         onRedo={handleRedo}
         canUndo={canUndo}
         canRedo={canRedo}
-        onBeforeImportReplace={captureHistory}
+        onBeforeImportReplace={() => {}}
+        onPatchSelectedTextNodes={onPatchSelectedTextNodes}
         bgColorActive={bgColorMode}
         bgColor={currentBgColor}
         onBgColorChange={handleBgColorChange}
@@ -660,10 +945,12 @@ const ConstructorPage: React.FC = () => {
             connectionMode={ConnectionMode.Loose}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
-            onNodeDragStart={captureHistory}
+            onNodeDragStart={onNodeDragStart}
+            onNodeDragStop={onNodeDragStop}
             onConnect={onConnect}
             onNodeClick={handleNodeClick}
             onPaneClick={handlePaneClick}
+            deleteKeyCode={null}
             fitView
             defaultEdgeOptions={{
               style: { strokeWidth: 2 },
@@ -690,7 +977,7 @@ const ConstructorPage: React.FC = () => {
             <RemoveEdge
               removeEdgeData={removeEdgeData}
               setRemoveEdgeData={setRemoveEdgeData}
-              onBeforeRemoveEdge={captureHistory}
+              onRemove={deleteEdgeWithCascade}
             />
           )}
         </div>
