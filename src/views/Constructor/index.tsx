@@ -43,7 +43,11 @@ import type {
 import { useParams } from "react-router-dom";
 import { api } from "../../services/api";
 import { getCurrentUser, getToken } from "../../utils/auth";
-import realtimeService from "../../services/realtimeService";
+import realtimeService, {
+  type CursorEvent,
+  type PresenceUser,
+} from "../../services/realtimeService";
+import { colorForUserId } from "../../utils/presence";
 import {
   useDiagramCollabStore,
   selectVisibleNodes,
@@ -63,7 +67,8 @@ function toRenderedFields(fields?: CollabField[]): Field[] {
 const ConstructorPage: React.FC = () => {
   const { id } = useParams();
   const [messageApi, contextHolder] = message.useMessage();
-  const { getNodes, screenToFlowPosition } = useReactFlow();
+  const { getNodes, screenToFlowPosition, flowToScreenPosition } =
+    useReactFlow();
   const [nodes, setNodes, onNodesChange] = useNodesState<CustomNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<CustomEdge>([]);
   const [pendingConnection, setPendingConnection] = useState<Connection | null>(
@@ -78,10 +83,17 @@ const ConstructorPage: React.FC = () => {
   const [generating, setGenerating] = useState(false);
   const [bgColorMode, setBgColorMode] = useState(false);
   const [currentBgColor, setCurrentBgColor] = useState("#63b3ed");
+  const [onlineUsers, setOnlineUsers] = useState<Record<string, PresenceUser>>(
+    {},
+  );
+  const [cursors, setCursors] = useState<
+    Record<string, { x: number; y: number; lastSeen: number }>
+  >({});
   const reactFlowContainerRef = useRef<HTMLDivElement>(null);
   const dragStartPositionsRef = useRef<Record<string, { x: number; y: number }>>(
     {},
   );
+  const lastCursorSentRef = useRef(0);
 
   const userId = getCurrentUser()?.id ?? "";
   const canUndo = useDiagramCollabStore((s) => s.undoStack.length > 0);
@@ -407,8 +419,45 @@ const ConstructorPage: React.FC = () => {
               useDiagramCollabStore.getState().applyOperation(operation);
               syncFromStore();
             },
-            onPresence: () => {},
-            onCursor: () => {},
+            onPresence: (event) => {
+              if (event.type === "ONLINE_USERS") {
+                const map: Record<string, PresenceUser> = {};
+                event.users.forEach((u) => {
+                  map[u.userId] = u;
+                });
+                setOnlineUsers(map);
+              }
+
+              if (event.type === "USER_JOINED") {
+                setOnlineUsers((prev) => ({
+                  ...prev,
+                  [event.userId]: { userId: event.userId, email: event.email },
+                }));
+              }
+
+              if (event.type === "USER_LEFT") {
+                setOnlineUsers((prev) => {
+                  const next = { ...prev };
+                  delete next[event.userId];
+                  return next;
+                });
+                setCursors((prev) => {
+                  const next = { ...prev };
+                  delete next[event.userId];
+                  return next;
+                });
+              }
+            },
+            onCursor: (cursor: CursorEvent) => {
+              setCursors((prev) => ({
+                ...prev,
+                [cursor.userId]: {
+                  x: cursor.x,
+                  y: cursor.y,
+                  lastSeen: Date.now(),
+                },
+              }));
+            },
             onError: (error) => messageApi.error(error.message),
           });
         }
@@ -424,9 +473,49 @@ const ConstructorPage: React.FC = () => {
 
     return () => {
       realtimeService.disconnect();
+      setOnlineUsers({});
+      setCursors({});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCursors((prev) => {
+        const now = Date.now();
+        const next: typeof prev = {};
+        Object.entries(prev).forEach(([uid, cursor]) => {
+          if (now - cursor.lastSeen <= 10000) next[uid] = cursor;
+        });
+        return next;
+      });
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const onCanvasMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      const now = Date.now();
+      if (now - lastCursorSentRef.current < 50) return;
+      lastCursorSentRef.current = now;
+
+      const flowPosition = screenToFlowPosition({
+        x: e.clientX,
+        y: e.clientY,
+      });
+
+      realtimeService.sendCursor(flowPosition);
+    },
+    [screenToFlowPosition],
+  );
+
+  // Cursores remotos são armazenados em coordenadas do "flow" (independentes
+  // de zoom/pan) e convertidos para tela a cada render; forçamos um re-render
+  // quando o próprio usuário move/zoomeia o canvas para eles acompanharem.
+  const onViewportMove = useCallback(() => {
+    setCursors((prev) => ({ ...prev }));
+  }, []);
 
   const onConnect = useCallback((params: Connection) => {
     setPendingConnection(params);
@@ -904,6 +993,7 @@ const ConstructorPage: React.FC = () => {
         canRedo={canRedo}
         onBeforeImportReplace={() => {}}
         onPatchSelectedTextNodes={onPatchSelectedTextNodes}
+        onlineUsers={Object.values(onlineUsers)}
         bgColorActive={bgColorMode}
         bgColor={currentBgColor}
         onBgColorChange={handleBgColorChange}
@@ -931,9 +1021,11 @@ const ConstructorPage: React.FC = () => {
 
         <div
           ref={reactFlowContainerRef}
+          onMouseMove={onCanvasMouseMove}
           style={{
             flex: 1,
             minWidth: 0,
+            position: "relative",
             cursor: bgColorMode ? "crosshair" : undefined,
           }}
         >
@@ -950,6 +1042,7 @@ const ConstructorPage: React.FC = () => {
             onConnect={onConnect}
             onNodeClick={handleNodeClick}
             onPaneClick={handlePaneClick}
+            onMove={onViewportMove}
             deleteKeyCode={null}
             fitView
             defaultEdgeOptions={{
@@ -972,6 +1065,56 @@ const ConstructorPage: React.FC = () => {
 
             <MiniMap pannable zoomable nodeColor="gray" />
           </ReactFlow>
+
+          <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+            {Object.entries(cursors).map(([uid, cursor]) => {
+              const screen = flowToScreenPosition({ x: cursor.x, y: cursor.y });
+              const containerRect =
+                reactFlowContainerRef.current?.getBoundingClientRect();
+              if (!containerRect) return null;
+
+              const label = onlineUsers[uid]?.email || uid;
+              const color = colorForUserId(uid);
+
+              return (
+                <div
+                  key={uid}
+                  style={{
+                    position: "absolute",
+                    left: screen.x - containerRect.left,
+                    top: screen.y - containerRect.top,
+                    transform: "translate(-2px, -2px)",
+                    zIndex: 1000,
+                    color,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 0,
+                      height: 0,
+                      borderLeft: "8px solid currentColor",
+                      borderTop: "8px solid transparent",
+                      borderBottom: "8px solid transparent",
+                    }}
+                  />
+                  <div
+                    style={{
+                      marginTop: 2,
+                      padding: "2px 6px",
+                      background: "#fff",
+                      color,
+                      border: "1px solid currentColor",
+                      fontSize: 11,
+                      borderRadius: 4,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {label}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
 
           {removeEdgeData && (
             <RemoveEdge

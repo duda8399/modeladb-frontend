@@ -18,6 +18,8 @@ import type { Dispatch, SetStateAction } from "react";
 import type { CustomEdge, CustomNode } from "../../types/diagramER";
 import { ExportButton } from "../../components/ConstructorComponents/ExportButton";
 import { ImportButton } from "../../components/ConstructorComponents/ImportButton";
+import type { PresenceUser } from "../../services/realtimeService";
+import { colorForUserId, initialFor } from "../../utils/presence";
 
 const fontGroups = [
   {
@@ -84,6 +86,7 @@ interface EditorToolbarProps {
   canRedo: boolean;
   onBeforeImportReplace: () => void;
   onPatchSelectedTextNodes: (patch: Record<string, unknown>) => void;
+  onlineUsers: PresenceUser[];
   bgColorActive: boolean;
   bgColor: string;
   onBgColorChange: (color: string) => void;
@@ -104,6 +107,7 @@ export function EditorToolbar({
   canRedo,
   onBeforeImportReplace,
   onPatchSelectedTextNodes,
+  onlineUsers,
   bgColorActive,
   bgColor,
   onBgColorChange,
@@ -401,6 +405,33 @@ export function EditorToolbar({
         </ColorPicker>
 
         <Divider type="vertical" />
+
+        {onlineUsers.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", marginRight: 4 }}>
+            {onlineUsers.map((user) => (
+              <div
+                key={user.userId}
+                title={user.email || user.userId}
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: "50%",
+                  background: colorForUserId(user.userId),
+                  color: "#fff",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  border: "2px solid #fff",
+                  marginLeft: -8,
+                }}
+              >
+                {initialFor(user.email || user.userId)}
+              </div>
+            ))}
+          </div>
+        )}
 
         <Button title="Compartilhar diagrama" icon={<LinkOutlined />} />
         <Button

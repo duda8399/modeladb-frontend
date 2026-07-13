@@ -1,9 +1,11 @@
 import { io, Socket } from "socket.io-client";
 import type { Operation } from "../stores/diagramCollabStore";
 
+export type PresenceUser = { userId: string; email?: string };
+
 export type PresenceEvent =
-  | { type: "ONLINE_USERS"; userIds: string[] }
-  | { type: "USER_JOINED"; userId: string }
+  | { type: "ONLINE_USERS"; users: PresenceUser[] }
+  | ({ type: "USER_JOINED" } & PresenceUser)
   | { type: "USER_LEFT"; userId: string };
 
 export type CursorEvent = { userId: string; x: number; y: number };
