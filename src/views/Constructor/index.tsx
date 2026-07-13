@@ -32,6 +32,7 @@ import NoteNode from "../../components/ConstructorComponents/NoteNode";
 import SectionNode from "../../components/ConstructorComponents/SectionNode";
 import TextNode from "../../components/ConstructorComponents/TextNode";
 import RelationModal from "../../components/ConstructorComponents/RelationModal";
+import ShareModal from "../../components/ConstructorComponents/ShareModal";
 import RemoveEdge from "../../components/ConstructorComponents/RemoverEdge";
 import FloatingEdge from "../../components/ConstructorComponents/FloatingEdge";
 import type {
@@ -89,6 +90,10 @@ const ConstructorPage: React.FC = () => {
   const [cursors, setCursors] = useState<
     Record<string, { x: number; y: number; lastSeen: number }>
   >({});
+  const [currentUserRole, setCurrentUserRole] = useState<
+    "OWNER" | "EDITOR" | "VIEWER" | null
+  >(null);
+  const [showShareModal, setShowShareModal] = useState(false);
   const reactFlowContainerRef = useRef<HTMLDivElement>(null);
   const dragStartPositionsRef = useRef<Record<string, { x: number; y: number }>>(
     {},
@@ -96,8 +101,10 @@ const ConstructorPage: React.FC = () => {
   const lastCursorSentRef = useRef(0);
 
   const userId = getCurrentUser()?.id ?? "";
-  const canUndo = useDiagramCollabStore((s) => s.undoStack.length > 0);
-  const canRedo = useDiagramCollabStore((s) => s.redoStack.length > 0);
+  const isOwner = currentUserRole === "OWNER";
+  const isViewer = currentUserRole === "VIEWER";
+  const canUndo = useDiagramCollabStore((s) => s.undoStack.length > 0) && !isViewer;
+  const canRedo = useDiagramCollabStore((s) => s.redoStack.length > 0) && !isViewer;
 
   const syncFromStore = useCallback(() => {
     const state = useDiagramCollabStore.getState();
@@ -148,14 +155,17 @@ const ConstructorPage: React.FC = () => {
 
   const sendOp = useCallback(
     (draft: OperationDraft) => {
-      if (!userId) return;
+      // Defesa em profundidade: o gateway já rejeita operações de um VIEWER no
+      // servidor, mas sem esse guard aqui a UI aplicaria a edição localmente
+      // antes de receber o erro — um "edit fantasma" que nunca chega a sincronizar.
+      if (!userId || isViewer) return;
 
       const op = useDiagramCollabStore.getState().stampOperation(draft, userId);
       useDiagramCollabStore.getState().applyOperation(op);
       realtimeService.sendOperation(op);
       syncFromStore();
     },
-    [userId, syncFromStore],
+    [userId, isViewer, syncFromStore],
   );
 
   const deleteEdgeWithCascade = useCallback(
@@ -404,6 +414,7 @@ const ConstructorPage: React.FC = () => {
         setDiagramName(loadedName);
         setNodes(loadedNodes);
         setEdges(loadedEdges);
+        setCurrentUserRole(data?.currentUserRole ?? null);
 
         useDiagramCollabStore
           .getState()
@@ -778,13 +789,15 @@ const ConstructorPage: React.FC = () => {
 
   const onEdgeMouseEnter = useCallback(
     (event: React.MouseEvent, edge: Edge) => {
+      if (isViewer) return;
+
       const { clientX, clientY } = event;
       setRemoveEdgeData({ x: clientX, y: clientY, edgeId: edge.id });
       setTimeout(() => {
         setRemoveEdgeData(null);
       }, 1500);
     },
-    [],
+    [isViewer],
   );
 
   const captureThumbnail = async (): Promise<Blob | undefined> => {
@@ -977,6 +990,16 @@ const ConstructorPage: React.FC = () => {
         onSelect={onSelectRelationType}
       />
 
+      {id && (
+        <ShareModal
+          open={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          diagramId={id}
+          isOwner={isOwner}
+          currentUserId={userId}
+        />
+      )}
+
       <Navbar />
       <EditorToolbar
         diagramName={diagramName}
@@ -994,6 +1017,8 @@ const ConstructorPage: React.FC = () => {
         onBeforeImportReplace={() => {}}
         onPatchSelectedTextNodes={onPatchSelectedTextNodes}
         onlineUsers={Object.values(onlineUsers)}
+        onOpenShare={() => setShowShareModal(true)}
+        readOnly={isViewer}
         bgColorActive={bgColorMode}
         bgColor={currentBgColor}
         onBgColorChange={handleBgColorChange}
@@ -1017,6 +1042,7 @@ const ConstructorPage: React.FC = () => {
           diagramName={diagramName}
           nodes={nodes}
           edges={edges}
+          readOnly={isViewer}
         />
 
         <div
@@ -1035,6 +1061,8 @@ const ConstructorPage: React.FC = () => {
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             connectionMode={ConnectionMode.Loose}
+            nodesDraggable={!isViewer}
+            nodesConnectable={!isViewer}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onNodeDragStart={onNodeDragStart}

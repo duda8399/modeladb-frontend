@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { Typography } from "antd";
+import { Col, Empty, Row, Typography } from "antd";
 import { AppLayout } from "../../components/LayoutComponents/AppLayout";
 import { api } from "../../services/api";
-import { getToken } from "../../utils/auth";
+import { DiagramCard } from "../../components/DashboardComponents/DiagramCard";
 
 const { Title } = Typography;
 
@@ -10,25 +10,20 @@ interface Project {
   id: string;
   name: string;
   updatedAt: string;
+  thumbnail?: string;
 }
 
 const SharedDocumentsPage: React.FC = () => {
-  const [recent, setRecent] = useState<Project[]>([]);
+  const [sharedDocuments, setSharedDocuments] = useState<Project[]>([]);
 
   useEffect(() => {
-    loadRecent();
+    loadSharedDocuments();
   }, []);
 
-  async function loadRecent() {
+  async function loadSharedDocuments() {
     try {
-      const token = getToken();
-
-      const { data } = await api.get("/diagram/recent", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      setRecent(data);
+      const { data } = await api.get("/diagram/shared-with-me");
+      setSharedDocuments(data);
     } catch (e) {
       console.log(e);
     }
@@ -37,6 +32,24 @@ const SharedDocumentsPage: React.FC = () => {
   return (
     <AppLayout>
       <Title level={3}>Compartilhados comigo</Title>
+
+      <Row
+        gutter={[24, 24]}
+        style={{ marginTop: 24, flex: 1, alignContent: "flex-start" }}
+      >
+        {sharedDocuments.map((doc) => (
+          <Col key={doc.id} xs={24} sm={24} md={12} lg={8}>
+            <DiagramCard document={doc} />
+          </Col>
+        ))}
+      </Row>
+
+      {sharedDocuments.length === 0 && (
+        <Empty
+          description="Nenhum diagrama foi compartilhado com você ainda"
+          style={{ marginTop: 32 }}
+        />
+      )}
     </AppLayout>
   );
 };

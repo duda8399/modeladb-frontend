@@ -41,6 +41,7 @@ interface Props {
   diagramName: string;
   nodes: CustomNode[];
   edges: CustomEdge[];
+  readOnly?: boolean;
 }
 
 export function SidebarConstructor({
@@ -53,6 +54,7 @@ export function SidebarConstructor({
   diagramName,
   nodes,
   edges,
+  readOnly = false,
 }: Props) {
   const [prompt, setPrompt] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
@@ -195,6 +197,7 @@ export function SidebarConstructor({
             icon={<ThunderboltOutlined />}
             onClick={handleGenerateClick}
             loading={generating}
+            disabled={readOnly}
           >
             Gerar
           </Button>
@@ -232,6 +235,7 @@ export function SidebarConstructor({
             title="Adicionar Texto"
             style={{ height: 60 }}
             onClick={onAddText}
+            disabled={readOnly}
             icon={<FontSizeOutlined style={{ fontSize: 20 }} />}
           />
           <Button
@@ -239,6 +243,7 @@ export function SidebarConstructor({
             title="Adicionar Seção"
             style={{ height: 60 }}
             onClick={onAddSection}
+            disabled={readOnly}
             icon={<BorderOutlined style={{ fontSize: 20 }} />}
           />
           <Button
@@ -246,6 +251,7 @@ export function SidebarConstructor({
             title="Adicionar Nota"
             style={{ height: 60 }}
             onClick={onAddNote}
+            disabled={readOnly}
             icon={<FileOutlined style={{ fontSize: 20, color: '#facc15' }} />}
           />
         </div>
@@ -270,7 +276,12 @@ export function SidebarConstructor({
           <span style={{ fontWeight: "bold" }}>ER</span>
         </div>
 
-        <div style={nodeStyle} onClick={onAddEntity}>
+        <div
+          style={
+            readOnly ? { ...nodeStyle, opacity: 0.5, cursor: "not-allowed" } : nodeStyle
+          }
+          onClick={readOnly ? undefined : onAddEntity}
+        >
           Adicionar Entidade
         </div>
       </div>

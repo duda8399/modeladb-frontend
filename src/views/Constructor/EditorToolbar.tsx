@@ -87,6 +87,8 @@ interface EditorToolbarProps {
   onBeforeImportReplace: () => void;
   onPatchSelectedTextNodes: (patch: Record<string, unknown>) => void;
   onlineUsers: PresenceUser[];
+  onOpenShare: () => void;
+  readOnly?: boolean;
   bgColorActive: boolean;
   bgColor: string;
   onBgColorChange: (color: string) => void;
@@ -108,6 +110,8 @@ export function EditorToolbar({
   onBeforeImportReplace,
   onPatchSelectedTextNodes,
   onlineUsers,
+  onOpenShare,
+  readOnly = false,
   bgColorActive,
   bgColor,
   onBgColorChange,
@@ -401,6 +405,7 @@ export function EditorToolbar({
             icon={<BgColorsOutlined />}
             type={bgColorActive ? "primary" : "default"}
             style={bgColorActive ? { color: '#fff' } : {}}
+            disabled={readOnly}
           />
         </ColorPicker>
 
@@ -433,7 +438,11 @@ export function EditorToolbar({
           </div>
         )}
 
-        <Button title="Compartilhar diagrama" icon={<LinkOutlined />} />
+        <Button
+          title="Compartilhar diagrama"
+          icon={<LinkOutlined />}
+          onClick={onOpenShare}
+        />
         <Button
           title="Desfazer"
           icon={<SlActionUndo />}
@@ -465,18 +474,20 @@ export function EditorToolbar({
 
         <Divider type="vertical" />
 
-        <Button type="primary" onClick={onSave} loading={saving}>
+        <Button type="primary" onClick={onSave} loading={saving} disabled={readOnly}>
           Salvar
         </Button>
-        <ImportButton
-          diagramName={diagramName}
-          onDiagramNameChange={onDiagramNameChange}
-          nodes={nodes}
-          edges={edges}
-          setNodes={setNodes}
-          setEdges={setEdges}
-          onBeforeImportReplace={onBeforeImportReplace}
-        />
+        {!readOnly && (
+          <ImportButton
+            diagramName={diagramName}
+            onDiagramNameChange={onDiagramNameChange}
+            nodes={nodes}
+            edges={edges}
+            setNodes={setNodes}
+            setEdges={setEdges}
+            onBeforeImportReplace={onBeforeImportReplace}
+          />
+        )}
         <ExportButton diagramName={diagramName} nodes={nodes} edges={edges} />
       </Space>
     </div>
