@@ -11,6 +11,8 @@ interface Project {
   name: string;
   updatedAt: string;
   thumbnail?: string;
+  role: "EDITOR" | "VIEWER";
+  owner: { id: string; name: string; email: string };
 }
 
 const SharedDocumentsPage: React.FC = () => {
@@ -39,7 +41,11 @@ const SharedDocumentsPage: React.FC = () => {
       >
         {sharedDocuments.map((doc) => (
           <Col key={doc.id} xs={24} sm={24} md={12} lg={8}>
-            <DiagramCard document={doc} />
+            <DiagramCard
+              document={doc}
+              roleLabel={doc.role === "EDITOR" ? "Editor" : "Visualizador"}
+              ownerName={doc.owner?.name || doc.owner?.email}
+            />
           </Col>
         ))}
       </Row>

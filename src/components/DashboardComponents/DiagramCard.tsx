@@ -4,8 +4,9 @@ import {
   DeleteOutlined,
   EditOutlined,
   ShareAltOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
-import { Button, Card, Popconfirm, message, theme, Typography } from "antd";
+import { Button, Card, Popconfirm, Tag, message, theme, Typography } from "antd";
 import { useNavigate } from "react-router-dom";
 
 const { Text } = Typography;
@@ -22,6 +23,8 @@ interface DiagramCardProps {
   onClick?: () => void;
   onDelete?: (id: string) => void;
   isDeleting?: boolean;
+  roleLabel?: "Editor" | "Visualizador";
+  ownerName?: string;
 }
 
 export function DiagramCard({
@@ -29,6 +32,8 @@ export function DiagramCard({
   onClick,
   onDelete,
   isDeleting = false,
+  roleLabel,
+  ownerName,
 }: DiagramCardProps) {
   const navigate = useNavigate();
   const {
@@ -114,6 +119,14 @@ export function DiagramCard({
           >
             {document.name}
           </Text>
+          {roleLabel && (
+            <Tag
+              color={roleLabel === "Editor" ? "blue" : "default"}
+              style={{ marginLeft: 0, flexShrink: 0 }}
+            >
+              {roleLabel}
+            </Tag>
+          )}
         </div>
 
         <div
@@ -187,15 +200,32 @@ export function DiagramCard({
         style={{
           padding: "8px 16px",
           display: "flex",
-          alignItems: "center",
-          gap: 6,
+          flexDirection: "column",
+          gap: 4,
         }}
       >
-        <ClockCircleOutlined style={{ fontSize: 12, color: "#555" }} />
-        <Text style={{ fontSize: 12, color: "#555" }}>Atualizado em:</Text>
-        <Text type="secondary" style={{ fontSize: 11, marginLeft: "auto" }}>
-          {formattedUpdatedAt}
-        </Text>
+        {ownerName && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <UserOutlined style={{ fontSize: 12, color: "#555" }} />
+            <Text style={{ fontSize: 12, color: "#555" }}>Proprietário:</Text>
+            <Text
+              type="secondary"
+              ellipsis
+              style={{ fontSize: 11, marginLeft: "auto" }}
+              title={ownerName}
+            >
+              {ownerName}
+            </Text>
+          </div>
+        )}
+
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <ClockCircleOutlined style={{ fontSize: 12, color: "#555" }} />
+          <Text style={{ fontSize: 12, color: "#555" }}>Atualizado em:</Text>
+          <Text type="secondary" style={{ fontSize: 11, marginLeft: "auto" }}>
+            {formattedUpdatedAt}
+          </Text>
+        </div>
       </div>
     </Card>
   );
