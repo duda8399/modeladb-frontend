@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CloseOutlined, HolderOutlined } from "@ant-design/icons";
 import {
   Button,
@@ -75,6 +75,47 @@ interface Props {
   setOpen: (state: boolean) => void;
   fields: Field[];
   setFields: (fields: Field[]) => void;
+}
+
+// Mantem o valor digitado em estado local ate o blur, para nao disparar um
+// op de colaboracao (e o consequente reset do value controlado) a cada tecla,
+// o que interrompe a composicao de acentos via dead-key (~, ^, ´) no meio da digitacao.
+function NameCell({
+  field,
+  onCommit,
+}: {
+  field: Field;
+  onCommit: (value: string) => void;
+}) {
+  const [value, setValue] = useState(field.name ?? "");
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    if (!editing) setValue(field.name ?? "");
+  }, [field.name, editing]);
+
+  return (
+    <Input
+      placeholder="Nome da coluna"
+      value={value}
+      prefix={
+        field.pk ? (
+          <PkIcon />
+        ) : field.fk ? (
+          <FkIcon />
+        ) : (
+          <span style={{ display: "inline-block", width: 11 }} />
+        )
+      }
+      onChange={(e) => setValue(e.target.value)}
+      onFocus={() => setEditing(true)}
+      onBlur={() => {
+        setEditing(false);
+        if (value !== (field.name ?? "")) onCommit(value);
+      }}
+      onPressEnter={(e) => (e.target as HTMLInputElement).blur()}
+    />
+  );
 }
 
 export default function Attributes({
@@ -267,21 +308,9 @@ export default function Attributes({
             </div>
             <Row gutter={16} align="middle" style={{ flex: 1 }}>
             <Col span={5}>
-              <Input
-                placeholder="Nome da coluna"
-                value={field.name ?? ""}
-                prefix={
-                  field.pk ? (
-                    <PkIcon />
-                  ) : field.fk ? (
-                    <FkIcon />
-                  ) : (
-                    <span style={{ display: "inline-block", width: 11 }} />
-                  )
-                }
-                onChange={(e: any) =>
-                  updateField(field.id, "name", e.target.value)
-                }
+              <NameCell
+                field={field}
+                onCommit={(value) => updateField(field.id, "name", value)}
               />
             </Col>
 
