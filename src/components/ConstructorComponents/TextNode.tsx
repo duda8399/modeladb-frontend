@@ -17,6 +17,8 @@ type TextNodeProps = {
   selected: boolean;
   id: string;
   onDelete?: () => void;
+  onCommitText?: (text: string) => void;
+  onResize?: (width: number, height: number) => void;
 };
 
 function toHtml(text: string): string {
@@ -29,10 +31,20 @@ function toHtml(text: string): string {
     .replace(/\n/g, "<br>");
 }
 
-const TextNode = ({ data, selected, id, onDelete }: TextNodeProps) => {
+const TextNode = ({
+  data,
+  selected,
+  id,
+  onDelete,
+  onCommitText,
+  onResize,
+}: TextNodeProps) => {
   const { setNodes } = useReactFlow();
   const editableRef = useRef<HTMLDivElement>(null);
   const [isFocused, setIsFocused] = useState(false);
+  const [isEmptyLocal, setIsEmptyLocal] = useState(
+    !data.text || data.text === "" || data.text === "<br>",
+  );
   const isActive = selected || isFocused;
 
   const handleFocus = useCallback(() => {
@@ -42,26 +54,29 @@ const TextNode = ({ data, selected, id, onDelete }: TextNodeProps) => {
 
   const handleBlur = useCallback(() => {
     setIsFocused(false);
-  }, []);
+    onCommitText?.(editableRef.current?.innerHTML ?? "");
+  }, [onCommitText]);
 
   useEffect(() => {
+    if (isFocused) return;
+
     const el = editableRef.current;
     if (!el) return;
     const html = toHtml(data.text ?? "");
     if (el.innerHTML !== html) {
       el.innerHTML = html;
     }
-  }, [data.text]);
+    setIsEmptyLocal(!html);
+  }, [data.text, isFocused]);
 
   const handleInput = useCallback(() => {
+    // Ver comentário equivalente em NoteNode.tsx: não tocar o array global de
+    // nodes por tecla digitada evita remontar este componente no meio da
+    // digitação. O commit colaborativo só acontece no blur.
     const el = editableRef.current;
     if (!el) return;
-    setNodes((nds) =>
-      nds.map((n) =>
-        n.id === id ? { ...n, data: { ...n.data, text: el.innerHTML } } : n,
-      ),
-    );
-  }, [id, setNodes]);
+    setIsEmptyLocal(!el.innerHTML || el.innerHTML === "<br>");
+  }, []);
 
   const handlePaste = useCallback((e: React.ClipboardEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -81,8 +96,6 @@ const TextNode = ({ data, selected, id, onDelete }: TextNodeProps) => {
     onDelete?.();
   }, [onDelete]);
 
-  const isEmpty = !data.text || data.text === "" || data.text === "<br>";
-
   return (
     <div
       style={{
@@ -96,7 +109,12 @@ const TextNode = ({ data, selected, id, onDelete }: TextNodeProps) => {
         overflow: "hidden",
       }}
     >
-      <NodeResizer minWidth={120} minHeight={70} isVisible={isActive} />
+      <NodeResizer
+        minWidth={120}
+        minHeight={70}
+        isVisible={isActive}
+        onResizeEnd={(_, params) => onResize?.(params.width, params.height)}
+      />
 
       <div style={{ position: "relative", flex: 1 }}>
         {isActive && (
@@ -115,7 +133,7 @@ const TextNode = ({ data, selected, id, onDelete }: TextNodeProps) => {
           />
         )}
 
-        {isEmpty && (
+        {isEmptyLocal && (
           <div
             style={{
               position: "absolute",

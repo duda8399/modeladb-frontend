@@ -17,6 +17,8 @@ type NoteNodeProps = {
   selected: boolean;
   id: string;
   onDelete?: () => void;
+  onCommitText?: (text: string) => void;
+  onResize?: (width: number, height: number) => void;
 };
 
 function toHtml(text: string): string {
@@ -29,10 +31,20 @@ function toHtml(text: string): string {
     .replace(/\n/g, "<br>");
 }
 
-const NoteNode = ({ data, selected, id, onDelete }: NoteNodeProps) => {
+const NoteNode = ({
+  data,
+  selected,
+  id,
+  onDelete,
+  onCommitText,
+  onResize,
+}: NoteNodeProps) => {
   const { setNodes } = useReactFlow();
   const editableRef = useRef<HTMLDivElement>(null);
   const [isFocused, setIsFocused] = useState(false);
+  const [isEmptyLocal, setIsEmptyLocal] = useState(
+    !data.text || data.text === "" || data.text === "<br>",
+  );
   const isActive = selected || isFocused;
 
   const handleFocus = useCallback(() => {
@@ -42,26 +54,34 @@ const NoteNode = ({ data, selected, id, onDelete }: NoteNodeProps) => {
 
   const handleBlur = useCallback(() => {
     setIsFocused(false);
-  }, []);
+    onCommitText?.(editableRef.current?.innerHTML ?? "");
+  }, [onCommitText]);
 
   useEffect(() => {
+    // Enquanto o usuário está digitando, o texto local (DOM) é a fonte da
+    // verdade — não sobrescrever com o valor (potencialmente desatualizado
+    // até o próximo commit) que vem da colaboração.
+    if (isFocused) return;
+
     const el = editableRef.current;
     if (!el) return;
     const html = toHtml(data.text ?? "");
     if (el.innerHTML !== html) {
       el.innerHTML = html;
     }
-  }, [data.text]);
+    setIsEmptyLocal(!html);
+  }, [data.text, isFocused]);
 
   const handleInput = useCallback(() => {
+    // Não toca o array global de nodes por tecla digitada — isso disparava um
+    // re-render de todo o diagrama a cada caractere e, combinado com a
+    // instabilidade do nodeTypes do ReactFlow, remontava este componente no
+    // meio da digitação, perdendo caracteres. O texto só vira operação
+    // colaborativa (onCommitText) no blur.
     const el = editableRef.current;
     if (!el) return;
-    setNodes((nds) =>
-      nds.map((n) =>
-        n.id === id ? { ...n, data: { ...n.data, text: el.innerHTML } } : n,
-      ),
-    );
-  }, [id, setNodes]);
+    setIsEmptyLocal(!el.innerHTML || el.innerHTML === "<br>");
+  }, []);
 
   const handlePaste = useCallback((e: React.ClipboardEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -81,8 +101,6 @@ const NoteNode = ({ data, selected, id, onDelete }: NoteNodeProps) => {
     onDelete?.();
   }, [onDelete]);
 
-  const isEmpty = !data.text || data.text === "" || data.text === "<br>";
-
   return (
     <div
       style={{
@@ -97,7 +115,12 @@ const NoteNode = ({ data, selected, id, onDelete }: NoteNodeProps) => {
         position: "relative",
       }}
     >
-      <NodeResizer minWidth={150} minHeight={80} isVisible={isActive} />
+      <NodeResizer
+        minWidth={150}
+        minHeight={80}
+        isVisible={isActive}
+        onResizeEnd={(_, params) => onResize?.(params.width, params.height)}
+      />
       {isActive && (
         <DeleteOutlined
           onClick={handleDelete}
@@ -114,7 +137,7 @@ const NoteNode = ({ data, selected, id, onDelete }: NoteNodeProps) => {
         />
       )}
 
-      {isEmpty && (
+      {isEmptyLocal && (
         <div
           style={{
             position: "absolute",

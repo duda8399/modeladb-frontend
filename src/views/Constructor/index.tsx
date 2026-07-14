@@ -240,16 +240,40 @@ const ConstructorPage: React.FC = () => {
     [deleteEdgeWithCascade, sendOp],
   );
 
-  const renameEntity = useCallback(
-    (nodeId: string, value: string) => {
+  const setNodeProp = useCallback(
+    (nodeId: string, key: string, value: unknown) => {
       const node = useDiagramCollabStore.getState().getNode(nodeId);
-      if (!node || node.data.name === value) return;
+      if (!node) return;
+
+      const previousValue = (node.data as Record<string, unknown>)[key];
+      if (previousValue === value) return;
 
       sendOp({
-        type: "SET_NODE_NAME",
+        type: "SET_NODE_PROP",
         targetId: nodeId,
-        payload: { value },
-        previousValue: node.data.name,
+        payload: { key, value },
+        previousValue,
+      });
+    },
+    [sendOp],
+  );
+
+  const resizeNode = useCallback(
+    (nodeId: string, width: number, height: number) => {
+      const node = useDiagramCollabStore.getState().getNode(nodeId);
+      if (!node) return;
+
+      const style = node.style as Record<string, unknown> | undefined;
+      const previousSize = {
+        width: style?.width as number | undefined,
+        height: style?.height as number | undefined,
+      };
+
+      sendOp({
+        type: "RESIZE_NODE",
+        targetId: nodeId,
+        payload: { width, height },
+        previousSize,
       });
     },
     [sendOp],
@@ -319,29 +343,44 @@ const ConstructorPage: React.FC = () => {
       <EntityNode
         {...props}
         onDelete={() => deleteNodeWithCascade(props.id)}
-        onRename={(value: string) => renameEntity(props.id, value)}
+        onRename={(value: string) => setNodeProp(props.id, "name", value)}
         onFieldsChange={(fields: Field[]) => onFieldsChange(props.id, fields)}
       />
     ),
-    [deleteNodeWithCascade, renameEntity, onFieldsChange],
+    [deleteNodeWithCascade, setNodeProp, onFieldsChange],
   );
   const NoteNodeConnected = useCallback(
     (props: any) => (
-      <NoteNode {...props} onDelete={() => deleteNodeWithCascade(props.id)} />
+      <NoteNode
+        {...props}
+        onDelete={() => deleteNodeWithCascade(props.id)}
+        onCommitText={(text: string) => setNodeProp(props.id, "text", text)}
+        onResize={(width: number, height: number) => resizeNode(props.id, width, height)}
+      />
     ),
-    [deleteNodeWithCascade],
+    [deleteNodeWithCascade, setNodeProp, resizeNode],
   );
   const SectionNodeConnected = useCallback(
     (props: any) => (
-      <SectionNode {...props} onDelete={() => deleteNodeWithCascade(props.id)} />
+      <SectionNode
+        {...props}
+        onDelete={() => deleteNodeWithCascade(props.id)}
+        onCommitLabel={(label: string) => setNodeProp(props.id, "label", label)}
+        onResize={(width: number, height: number) => resizeNode(props.id, width, height)}
+      />
     ),
-    [deleteNodeWithCascade],
+    [deleteNodeWithCascade, setNodeProp, resizeNode],
   );
   const TextNodeConnected = useCallback(
     (props: any) => (
-      <TextNode {...props} onDelete={() => deleteNodeWithCascade(props.id)} />
+      <TextNode
+        {...props}
+        onDelete={() => deleteNodeWithCascade(props.id)}
+        onCommitText={(text: string) => setNodeProp(props.id, "text", text)}
+        onResize={(width: number, height: number) => resizeNode(props.id, width, height)}
+      />
     ),
-    [deleteNodeWithCascade],
+    [deleteNodeWithCascade, setNodeProp, resizeNode],
   );
   const nodeTypes = useMemo(
     () => ({
@@ -671,24 +710,22 @@ const ConstructorPage: React.FC = () => {
     (_: React.MouseEvent, node: CustomNode) => {
       if (!bgColorMode || node.type !== "sectionNode") return;
 
-      useDiagramCollabStore
-        .getState()
-        .patchNodeData(node.id, { bgColor: currentBgColor });
-      syncFromStore();
+      setNodeProp(node.id, "bgColor", currentBgColor);
     },
-    [bgColorMode, currentBgColor, syncFromStore],
+    [bgColorMode, currentBgColor, setNodeProp],
   );
 
   const onPatchSelectedTextNodes = useCallback(
     (patch: Record<string, unknown>) => {
       nodes.forEach((n) => {
         if (n.selected && (n.type === "textNode" || n.type === "noteNode")) {
-          useDiagramCollabStore.getState().patchNodeData(n.id, patch);
+          Object.entries(patch).forEach(([key, value]) => {
+            setNodeProp(n.id, key, value);
+          });
         }
       });
-      syncFromStore();
     },
-    [nodes, syncFromStore],
+    [nodes, setNodeProp],
   );
 
   const handlePaneClick = useCallback(() => {

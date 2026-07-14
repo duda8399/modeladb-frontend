@@ -35,7 +35,8 @@ export type CollabEdge = Omit<CustomEdge, "data"> & { data?: CollabEdgeData };
 export type OperationType =
   | "ADD_NODE"
   | "MOVE_NODE"
-  | "SET_NODE_NAME"
+  | "RESIZE_NODE"
+  | "SET_NODE_PROP"
   | "DELETE_NODE"
   | "RESTORE_NODE"
   | "ADD_FIELD"
@@ -58,6 +59,7 @@ export interface Operation {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   previousValue?: any;
   previousPosition?: XYPosition;
+  previousSize?: { width?: number; height?: number };
 }
 
 export type OperationDraft = Omit<Operation, "opId" | "userId" | "lamport">;
@@ -112,6 +114,30 @@ function applyPositionAxis(
   return true;
 }
 
+function applyStyleAxis(
+  data: CollabNodeData,
+  style: Record<string, unknown>,
+  axis: "width" | "height",
+  value: number,
+  lamport: number,
+  userId: string,
+): boolean {
+  const key = axis === "width" ? "sizeWidth" : "sizeHeight";
+  const current = data._crdt?.[key] || { lamport: 0, userId: "" };
+  const incoming = { lamport, userId };
+
+  const shouldApply =
+    incoming.lamport > current.lamport ||
+    (incoming.lamport === current.lamport && incoming.userId > current.userId);
+
+  if (!shouldApply) return false;
+
+  style[axis] = value;
+  data._crdt = { ...(data._crdt || {}), [key]: incoming };
+
+  return true;
+}
+
 function cloneField(field: CollabField): CollabField {
   return { ...field, _crdt: field._crdt ? { ...field._crdt } : undefined };
 }
@@ -136,7 +162,6 @@ interface DiagramCollabState {
   applyOperation: (op: Operation, saveHistory?: boolean) => void;
   undo: (userId: string) => Operation | null;
   redo: (userId: string) => Operation | null;
-  patchNodeData: (nodeId: string, patch: Record<string, unknown>) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   compactDocument: () => { nodes: any[]; edges: any[] };
   getNode: (nodeId: string) => CollabNode | undefined;
@@ -228,7 +253,23 @@ function executeMoveNode(get: Get, set: Set, op: Operation) {
   });
 }
 
-function executeSetNodeName(get: Get, set: Set, op: Operation) {
+function executeSetNodeProp(get: Get, set: Set, op: Operation) {
+  if (!get().nodeIndex.has(op.targetId)) {
+    addPendingOperation(get, op.targetId, op);
+    return;
+  }
+  if (!op.payload?.key) return;
+
+  updateNodeById(get, set, op.targetId, (node) => {
+    const data = { ...node.data };
+    if (!applyLWWRegister(data, op.payload.key, op.payload.value, op.lamport, op.userId)) {
+      return node;
+    }
+    return { ...node, data };
+  });
+}
+
+function executeResizeNode(get: Get, set: Set, op: Operation) {
   if (!get().nodeIndex.has(op.targetId)) {
     addPendingOperation(get, op.targetId, op);
     return;
@@ -236,11 +277,15 @@ function executeSetNodeName(get: Get, set: Set, op: Operation) {
   if (!op.payload) return;
 
   updateNodeById(get, set, op.targetId, (node) => {
+    const style = { ...(node.style || {}) };
     const data = { ...node.data };
-    if (!applyLWWRegister(data, "name", op.payload.value, op.lamport, op.userId)) {
-      return node;
-    }
-    return { ...node, data };
+
+    const appliedW = applyStyleAxis(data, style, "width", op.payload.width, op.lamport, op.userId);
+    const appliedH = applyStyleAxis(data, style, "height", op.payload.height, op.lamport, op.userId);
+
+    if (!appliedW && !appliedH) return node;
+
+    return { ...node, style, data };
   });
 }
 
@@ -401,7 +446,8 @@ function execute(get: Get, set: Set, op: Operation) {
   switch (op.type) {
     case "ADD_NODE": return executeAddNode(get, set, op);
     case "MOVE_NODE": return executeMoveNode(get, set, op);
-    case "SET_NODE_NAME": return executeSetNodeName(get, set, op);
+    case "RESIZE_NODE": return executeResizeNode(get, set, op);
+    case "SET_NODE_PROP": return executeSetNodeProp(get, set, op);
     case "DELETE_NODE": return executeDeleteNode(get, set, op);
     case "RESTORE_NODE": return executeRestoreNode(get, set, op);
     case "ADD_FIELD": return executeAddField(get, set, op);
@@ -443,12 +489,20 @@ function getInverseOperation(op: Operation): OperationDraft | null {
         previousPosition: op.payload,
       };
 
-    case "SET_NODE_NAME":
+    case "SET_NODE_PROP":
       return {
-        type: "SET_NODE_NAME",
+        type: "SET_NODE_PROP",
         targetId: op.targetId,
-        payload: { value: op.previousValue },
+        payload: { key: op.payload?.key, value: op.previousValue },
         previousValue: op.payload?.value,
+      };
+
+    case "RESIZE_NODE":
+      return {
+        type: "RESIZE_NODE",
+        targetId: op.targetId,
+        payload: op.previousSize,
+        previousSize: op.payload,
       };
 
     case "ADD_FIELD":
@@ -633,13 +687,6 @@ export const useDiagramCollabStore = create<DiagramCollabState>()((set, get) => 
     get().applyOperation(redoOp, true);
 
     return redoOp;
-  },
-
-  patchNodeData: (nodeId, patch) => {
-    updateNodeById(get, set, nodeId, (node) => ({
-      ...node,
-      data: { ...node.data, ...patch },
-    }));
   },
 
   compactDocument: () => {

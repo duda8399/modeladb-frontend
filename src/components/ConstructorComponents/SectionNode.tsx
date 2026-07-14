@@ -1,5 +1,5 @@
-import { useCallback } from "react";
-import { NodeResizer, useReactFlow } from "reactflow";
+import { useCallback, useEffect, useState } from "react";
+import { NodeResizer } from "reactflow";
 import { DeleteOutlined } from "@ant-design/icons";
 
 type SectionNodeProps = {
@@ -7,21 +7,34 @@ type SectionNodeProps = {
   selected: boolean;
   id: string;
   onDelete?: () => void;
+  onCommitLabel?: (label: string) => void;
+  onResize?: (width: number, height: number) => void;
 };
 
-const SectionNode = ({ data, selected, id, onDelete }: SectionNodeProps) => {
-  const { setNodes } = useReactFlow();
+const SectionNode = ({
+  data,
+  selected,
+  onDelete,
+  onCommitLabel,
+  onResize,
+}: SectionNodeProps) => {
+  const [label, setLabel] = useState(data.label ?? "Seção");
+  const [isEditingLabel, setIsEditingLabel] = useState(false);
+
+  useEffect(() => {
+    if (!isEditingLabel) setLabel(data.label ?? "Seção");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.label]);
 
   const handleLabelChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      setNodes((nds) =>
-        nds.map((n) =>
-          n.id === id ? { ...n, data: { ...n.data, label: e.target.value } } : n,
-        ),
-      );
-    },
-    [id, setNodes],
+    (e: React.ChangeEvent<HTMLInputElement>) => setLabel(e.target.value),
+    [],
   );
+
+  const handleLabelBlur = useCallback(() => {
+    setIsEditingLabel(false);
+    onCommitLabel?.(label);
+  }, [label, onCommitLabel]);
 
   const handleDelete = useCallback(() => {
     onDelete?.();
@@ -37,10 +50,17 @@ const SectionNode = ({ data, selected, id, onDelete }: SectionNodeProps) => {
         borderRadius: 8,
       }}
     >
-      <NodeResizer minWidth={200} minHeight={150} isVisible={selected} />
+      <NodeResizer
+        minWidth={200}
+        minHeight={150}
+        isVisible={selected}
+        onResizeEnd={(_, params) => onResize?.(params.width, params.height)}
+      />
       <input
-        value={data.label ?? "Seção"}
+        value={label}
         onChange={handleLabelChange}
+        onFocus={() => setIsEditingLabel(true)}
+        onBlur={handleLabelBlur}
         style={{
           position: "absolute",
           top: 6,
