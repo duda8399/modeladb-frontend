@@ -755,7 +755,8 @@ const ConstructorPage: React.FC = () => {
       id: crypto.randomUUID(),
       type: "textNode",
       position: getNewNodePosition(),
-      data: { text: "" },
+      style: { width: 220, height: 100 },
+      data: { text: "", fontSize: 18 },
     };
     sendOp({ type: "ADD_NODE", targetId: newNode.id, payload: newNode });
   }, [sendOp, getNewNodePosition]);

@@ -103,15 +103,17 @@ const TextNode = ({
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        border: "none",
+        border: isActive ? "1px dashed #93c5fd" : "1px dashed transparent",
         borderRadius: 6,
         background: data.textBgColor || "transparent",
+        boxSizing: "border-box",
+        padding: 6,
         overflow: "hidden",
       }}
     >
       <NodeResizer
-        minWidth={120}
-        minHeight={70}
+        minWidth={180}
+        minHeight={90}
         isVisible={isActive}
         onResizeEnd={(_, params) => onResize?.(params.width, params.height)}
       />
@@ -137,12 +139,13 @@ const TextNode = ({
           <div
             style={{
               position: "absolute",
-              top: 8,
-              left: 6,
-              color: "#aaa",
+              top: 2,
+              left: 2,
+              color: "#6b7280",
+              fontStyle: "italic",
               pointerEvents: "none",
               fontFamily: data.fontFamily ?? "inherit",
-              fontSize: data.fontSize ?? 14,
+              fontSize: data.fontSize ?? 18,
               userSelect: "none",
             }}
           >
@@ -164,9 +167,9 @@ const TextNode = ({
             background: "transparent",
             outline: "none",
             boxSizing: "border-box",
-            padding: "8px 28px 8px 6px",
+            padding: "2px 22px 2px 2px",
             fontFamily: data.fontFamily ?? "inherit",
-            fontSize: data.fontSize ?? 14,
+            fontSize: data.fontSize ?? 18,
             fontWeight: data.bold ? "bold" : "normal",
             fontStyle: data.italic ? "italic" : "normal",
             textDecoration: data.underline ? "underline" : "none",
