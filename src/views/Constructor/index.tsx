@@ -466,7 +466,7 @@ const ConstructorPage: React.FC = () => {
             diagramId: id,
             token,
             onOperation: (operation) => {
-              useDiagramCollabStore.getState().applyOperation(operation);
+              useDiagramCollabStore.getState().applyOperation(operation, false);
               syncFromStore();
             },
             onPresence: (event) => {
