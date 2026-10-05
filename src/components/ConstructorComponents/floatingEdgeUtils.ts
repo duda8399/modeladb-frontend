@@ -1,64 +1,50 @@
-import { Position } from "reactflow";
+import { Position, internalsSymbol } from "reactflow";
 
-// Calcula o ponto onde a reta entre os centros de dois nos cruza a borda do
-// primeiro no (intersectionNode). Baseado no exemplo oficial de floating edges
-// do ReactFlow.
-function getNodeIntersection(intersectionNode: any, targetNode: any) {
-  const {
-    width: intersectionNodeWidth,
-    height: intersectionNodeHeight,
-    positionAbsolute: intersectionNodePosition,
-  } = intersectionNode;
-  const targetPosition = targetNode.positionAbsolute;
+type Side = Position.Left | Position.Right;
 
-  const w = intersectionNodeWidth / 2;
-  const h = intersectionNodeHeight / 2;
+// Centro do ponto de conexao (handle) do lado pedido, em coordenadas do fluxo.
+// Usa a posicao medida pelo ReactFlow (handleBounds) para a linha nascer
+// exatamente na bolinha; se o no ainda nao foi medido, cai no meio da lateral.
+function getHandlePoint(node: any, side: Side) {
+  const { positionAbsolute: pos, width = 0, height = 0 } = node;
+  const handle = node[internalsSymbol]?.handleBounds?.source?.find(
+    (h: any) => h.position === side,
+  );
 
-  const x2 = intersectionNodePosition.x + w;
-  const y2 = intersectionNodePosition.y + h;
-  const x1 = targetPosition.x + targetNode.width / 2;
-  const y1 = targetPosition.y + targetNode.height / 2;
-
-  const xx1 = (x1 - x2) / (2 * w) - (y1 - y2) / (2 * h);
-  const yy1 = (x1 - x2) / (2 * w) + (y1 - y2) / (2 * h);
-  const a = 1 / (Math.abs(xx1) + Math.abs(yy1) || 1);
-  const xx3 = a * xx1;
-  const yy3 = a * yy1;
-  const x = w * (xx3 + yy3) + x2;
-  const y = h * (-xx3 + yy3) + y2;
-
-  return { x, y };
-}
-
-// Descobre de qual lado (esquerda/direita/topo/baixo) o ponto de intersecao cai
-function getEdgePosition(node: any, intersectionPoint: { x: number; y: number }) {
-  const nx = Math.round(node.positionAbsolute.x);
-  const ny = Math.round(node.positionAbsolute.y);
-  const px = Math.round(intersectionPoint.x);
-  const py = Math.round(intersectionPoint.y);
-
-  if (px <= nx + 1) return Position.Left;
-  if (px >= nx + node.width - 1) return Position.Right;
-  if (py <= ny + 1) return Position.Top;
-  if (py >= ny + node.height - 1) return Position.Bottom;
-
-  return Position.Top;
-}
-
-// Retorna os pontos de inicio/fim e os lados para desenhar a aresta flutuante
-export function getEdgeParams(source: any, target: any) {
-  const sourceIntersectionPoint = getNodeIntersection(source, target);
-  const targetIntersectionPoint = getNodeIntersection(target, source);
-
-  const sourcePos = getEdgePosition(source, sourceIntersectionPoint);
-  const targetPos = getEdgePosition(target, targetIntersectionPoint);
+  if (handle) {
+    return {
+      x: pos.x + handle.x + handle.width / 2,
+      y: pos.y + handle.y + handle.height / 2,
+    };
+  }
 
   return {
-    sx: sourceIntersectionPoint.x,
-    sy: sourceIntersectionPoint.y,
-    tx: targetIntersectionPoint.x,
-    ty: targetIntersectionPoint.y,
-    sourcePos,
-    targetPos,
+    x: side === Position.Left ? pos.x : pos.x + width,
+    y: pos.y + height / 2,
   };
+}
+
+// Escolhe de qual lateral (esquerda/direita) sai e chega a aresta:
+// - tabelas lado a lado: as laterais que estao de frente uma para a outra;
+// - tabelas empilhadas (sobrepostas no eixo x): ambas pela direita, formando
+//   um "C" por fora em vez de atravessar as tabelas.
+function getSides(source: any, target: any): [Side, Side] {
+  const sLeft = source.positionAbsolute.x;
+  const sRight = sLeft + (source.width ?? 0);
+  const tLeft = target.positionAbsolute.x;
+  const tRight = tLeft + (target.width ?? 0);
+
+  if (sRight <= tLeft) return [Position.Right, Position.Left];
+  if (tRight <= sLeft) return [Position.Left, Position.Right];
+  return [Position.Right, Position.Right];
+}
+
+// Quem e source/target continua definido pela ordem do clique; aqui so
+// decidimos em qual bolinha de cada tabela a linha encosta.
+export function getEdgeParams(source: any, target: any) {
+  const [sourcePos, targetPos] = getSides(source, target);
+  const s = getHandlePoint(source, sourcePos);
+  const t = getHandlePoint(target, targetPos);
+
+  return { sx: s.x, sy: s.y, tx: t.x, ty: t.y, sourcePos, targetPos };
 }

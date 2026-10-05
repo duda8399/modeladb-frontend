@@ -180,23 +180,20 @@ export default memo(function EntityNode({
             uma conexao, entao o lado de onde voce arrasta (1o clique) vira o
             source e onde voce solta (2o clique) vira o target. Assim a direcao
             da FK segue a ordem do clique, e nao a posicao das tabelas. */}
-        {/* Faixas invisiveis nas laterais: permitem iniciar/receber conexoes
-            sem mostrar bolinhas. Com floating edges o ponto exato do handle nao
-            importa, entao escondemos e usamos a borda inteira como area. */}
-        <Handle
-          type="source"
-          id="left"
-          position={Position.Left}
-          className="floating-handle"
-          style={{ left: 0 }}
-        />
-        <Handle
-          type="source"
-          id="right"
-          position={Position.Right}
-          className="floating-handle"
-          style={{ right: 0 }}
-        />
+        {/* Pontos de conexao visiveis nas laterais da tabela. Com floating
+            edges o ponto exato do handle nao importa para o desenho da linha,
+            ele serve so para iniciar/receber a conexao. */}
+        {[Position.Left, Position.Right].map(
+          (pos) => (
+            <Handle
+              key={pos}
+              type="source"
+              id={pos}
+              position={pos}
+              className="entity-handle"
+            />
+          ),
+        )}
       </Card>
     </>
   );

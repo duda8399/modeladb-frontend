@@ -18,7 +18,6 @@ import {
   useNodesState,
   ConnectionMode,
   type Connection,
-  type Edge,
   getNodesBounds,
   getViewportForBounds,
   useReactFlow,
@@ -33,13 +32,12 @@ import SectionNode from "../../components/ConstructorComponents/SectionNode";
 import TextNode from "../../components/ConstructorComponents/TextNode";
 import RelationModal from "../../components/ConstructorComponents/RelationModal";
 import ShareModal from "../../components/ConstructorComponents/ShareModal";
-import RemoveEdge from "../../components/ConstructorComponents/RemoverEdge";
+import { EdgeActionsContext } from "../../components/ConstructorComponents/EdgeActionsContext";
 import FloatingEdge from "../../components/ConstructorComponents/FloatingEdge";
 import type {
   CustomEdge,
   CustomNode,
   Field,
-  RemoveEdgeData,
 } from "../../types/diagramER";
 import { useParams } from "react-router-dom";
 import { api } from "../../services/api";
@@ -76,9 +74,6 @@ const ConstructorPage: React.FC = () => {
     null,
   );
   const [openRelationModal, setOpenRelationModal] = useState(false);
-  const [removeEdgeData, setRemoveEdgeData] = useState<RemoveEdgeData | null>(
-    null,
-  );
   const [diagramName, setDiagramName] = useState("");
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -398,6 +393,10 @@ const ConstructorPage: React.FC = () => {
   );
 
   const edgeTypes = useMemo(() => ({ floating: FloatingEdge }), []);
+  const edgeActions = useMemo(
+    () => ({ onRemove: deleteEdgeWithCascade, readOnly: isViewer }),
+    [deleteEdgeWithCascade, isViewer],
+  );
 
   const handleUndo = useCallback(() => {
     const op = useDiagramCollabStore.getState().undo(userId);
@@ -825,19 +824,6 @@ const ConstructorPage: React.FC = () => {
     [sendOp],
   );
 
-  const onEdgeMouseEnter = useCallback(
-    (event: React.MouseEvent, edge: Edge) => {
-      if (isViewer) return;
-
-      const { clientX, clientY } = event;
-      setRemoveEdgeData({ x: clientX, y: clientY, edgeId: edge.id });
-      setTimeout(() => {
-        setRemoveEdgeData(null);
-      }, 1500);
-    },
-    [isViewer],
-  );
-
   const captureThumbnail = async (): Promise<Blob | undefined> => {
     if (!reactFlowContainerRef.current) return undefined;
 
@@ -1093,6 +1079,7 @@ const ConstructorPage: React.FC = () => {
             cursor: bgColorMode ? "crosshair" : undefined,
           }}
         >
+          <EdgeActionsContext.Provider value={edgeActions}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -1115,7 +1102,6 @@ const ConstructorPage: React.FC = () => {
               style: { strokeWidth: 2 },
               labelStyle: { fill: "#333", fontWeight: 600 },
             }}
-            onEdgeMouseEnter={onEdgeMouseEnter}
           >
             <Background />
 
@@ -1131,6 +1117,7 @@ const ConstructorPage: React.FC = () => {
 
             <MiniMap pannable zoomable nodeColor="gray" />
           </ReactFlow>
+          </EdgeActionsContext.Provider>
 
           <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
             {Object.entries(cursors).map(([uid, cursor]) => {
@@ -1182,13 +1169,6 @@ const ConstructorPage: React.FC = () => {
             })}
           </div>
 
-          {removeEdgeData && (
-            <RemoveEdge
-              removeEdgeData={removeEdgeData}
-              setRemoveEdgeData={setRemoveEdgeData}
-              onRemove={deleteEdgeWithCascade}
-            />
-          )}
         </div>
       </div>
     </Layout>
