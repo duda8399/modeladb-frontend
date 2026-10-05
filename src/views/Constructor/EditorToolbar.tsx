@@ -71,11 +71,15 @@ const sizeOptions = [
   { value: 72, label: "72" },
 ];
 
+export type SaveStatus = "idle" | "pending" | "saving" | "saved" | "error";
+
 interface EditorToolbarProps {
   diagramName: string;
   onDiagramNameChange: (name: string) => void;
   onSave: () => void;
   saving?: boolean;
+  saveStatus?: SaveStatus;
+  lastSavedAt?: Date | null;
   nodes: CustomNode[];
   edges: CustomEdge[];
   setNodes: Dispatch<SetStateAction<CustomNode[]>>;
@@ -99,6 +103,8 @@ export function EditorToolbar({
   onDiagramNameChange,
   onSave,
   saving = false,
+  saveStatus = "idle",
+  lastSavedAt = null,
   nodes,
   edges,
   setNodes,
@@ -458,22 +464,7 @@ export function EditorToolbar({
       </Space>
 
       <Space wrap>
-        <input
-          value={diagramName}
-          onChange={(e) => onDiagramNameChange(e.target.value)}
-          placeholder="Nome do diagrama"
-          style={{
-            width: "clamp(140px, 20vw, 320px)",
-            height: 32,
-            border: "1px solid #d9d9d9",
-            borderRadius: 6,
-            padding: "0 10px",
-            fontSize: 14,
-          }}
-        />
-
-        <Divider type="vertical" />
-
+        <SaveStatusText status={saveStatus} lastSavedAt={lastSavedAt} />
         <Button type="primary" onClick={onSave} loading={saving} disabled={readOnly}>
           Salvar
         </Button>
@@ -491,5 +482,38 @@ export function EditorToolbar({
         <ExportButton diagramName={diagramName} nodes={nodes} edges={edges} />
       </Space>
     </div>
+  );
+}
+
+function SaveStatusText({
+  status,
+  lastSavedAt,
+}: {
+  status: SaveStatus;
+  lastSavedAt: Date | null;
+}) {
+  const time = lastSavedAt?.toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const content: Record<SaveStatus, { text: string; color: string } | null> = {
+    idle: null,
+    pending: { text: "Alterações não salvas", color: "#8c8c8c" },
+    saving: { text: "Salvando...", color: "#8c8c8c" },
+    saved: { text: time ? `Salvo às ${time}` : "Salvo", color: "#2e7d32" },
+    error: { text: "Erro ao salvar", color: "#d40c48" },
+  };
+
+  const current = content[status];
+  if (!current) return null;
+
+  return (
+    <span
+      aria-live="polite"
+      style={{ fontSize: 13, color: current.color, whiteSpace: "nowrap" }}
+    >
+      {current.text}
+    </span>
   );
 }

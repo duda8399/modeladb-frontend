@@ -25,7 +25,7 @@ import {
 import { SidebarConstructor } from "./SidebarConstructor";
 import { Layout, message } from "antd";
 import { Navbar } from "../../components/LayoutComponents/Navbar";
-import { EditorToolbar } from "./EditorToolbar";
+import { EditorToolbar, type SaveStatus } from "./EditorToolbar";
 import EntityNode from "../../components/ConstructorComponents/EntityNode";
 import NoteNode from "../../components/ConstructorComponents/NoteNode";
 import SectionNode from "../../components/ConstructorComponents/SectionNode";
@@ -63,6 +63,9 @@ function toRenderedFields(fields?: CollabField[]): Field[] {
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 }
 
+const AUTOSAVE_DELAY_MS = 2000;
+const THUMBNAIL_INTERVAL_MS = 30000;
+
 const ConstructorPage: React.FC = () => {
   const { id } = useParams();
   const [messageApi, contextHolder] = message.useMessage();
@@ -76,6 +79,10 @@ const ConstructorPage: React.FC = () => {
   const [openRelationModal, setOpenRelationModal] = useState(false);
   const [diagramName, setDiagramName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [savedSignature, setSavedSignature] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [bgColorMode, setBgColorMode] = useState(false);
   const [currentBgColor, setCurrentBgColor] = useState("#63b3ed");
@@ -98,6 +105,8 @@ const ConstructorPage: React.FC = () => {
   const userId = getCurrentUser()?.id ?? "";
   const isOwner = currentUserRole === "OWNER";
   const isViewer = currentUserRole === "VIEWER";
+  const isViewerRef = useRef(isViewer);
+  isViewerRef.current = isViewer;
   const canUndo = useDiagramCollabStore((s) => s.undoStack.length > 0) && !isViewer;
   const canRedo = useDiagramCollabStore((s) => s.redoStack.length > 0) && !isViewer;
 
@@ -418,6 +427,10 @@ const ConstructorPage: React.FC = () => {
     const loadDiagram = async () => {
       if (!id) return;
 
+      setLoaded(false);
+      setSavedSignature(null);
+      setSaveStatus("idle");
+
       try {
         const { data } = await api.get(`/diagram/${id}`);
 
@@ -453,6 +466,7 @@ const ConstructorPage: React.FC = () => {
         setNodes(loadedNodes);
         setEdges(loadedEdges);
         setCurrentUserRole(data?.currentUserRole ?? null);
+        setLoaded(true);
 
         useDiagramCollabStore
           .getState()
@@ -868,51 +882,154 @@ const ConstructorPage: React.FC = () => {
     }
   };
 
-  const handleSave = useCallback(async () => {
-    if (!id) return;
+  const savePayload = useMemo(
+    () => ({
+      name: diagramName,
+      nodes: nodes.map((node) => ({
+        id: node.id,
+        type: node.type || "entityNode",
+        data: node.data,
+        position: {
+          x: Number(node.position?.x ?? 0),
+          y: Number(node.position?.y ?? 0),
+        },
+        style: node.style ?? null,
+      })),
+      edges: edges.map((edge) => ({
+        id: edge.id,
+        source: edge.source,
+        sourceHandle: edge.sourceHandle || null,
+        target: edge.target,
+        label: edge.label ?? null,
+        type: edge.type || "floating",
+        data: edge.data,
+      })),
+    }),
+    [diagramName, edges, nodes],
+  );
+  const saveSignature = useMemo(() => JSON.stringify(savePayload), [savePayload]);
 
-    setSaving(true);
+  const savePayloadRef = useRef(savePayload);
+  const saveSignatureRef = useRef(saveSignature);
+  const savedSignatureRef = useRef(savedSignature);
+  const saveInFlightRef = useRef<Promise<void> | null>(null);
+  const lastThumbnailAtRef = useRef(0);
+  savePayloadRef.current = savePayload;
+  saveSignatureRef.current = saveSignature;
+  savedSignatureRef.current = savedSignature;
 
-    try {
-      await api.put(`/diagram/${id}`, {
-        name: diagramName,
-        nodes: nodes.map((node) => ({
-          id: node.id,
-          type: node.type || "entityNode",
-          data: node.data,
-          position: {
-            x: Number(node.position?.x ?? 0),
-            y: Number(node.position?.y ?? 0),
-          },
-          style: node.style ?? null,
-        })),
-        edges: edges.map((edge) => ({
-          id: edge.id,
-          source: edge.source,
-          sourceHandle: edge.sourceHandle || null,
-          target: edge.target,
-          label: edge.label ?? null,
-          type: edge.type || "floating",
-          data: edge.data,
-        })),
-      });
+  const isDirty =
+    loaded && savedSignature !== null && saveSignature !== savedSignature;
 
-      const thumbnail = await captureThumbnail();
+  const persistDiagram = useCallback(
+    async ({ manual }: { manual: boolean }) => {
+      if (!id) return;
 
-      if (thumbnail) {
-        const formData = new FormData();
-        formData.append("thumbnail", thumbnail, "thumbnail.jpg");
-        await api.put(`/diagram/${id}/thumbnail`, formData);
+      if (saveInFlightRef.current) {
+        if (!manual) return;
+        await saveInFlightRef.current;
       }
 
-      messageApi.success("Diagrama salvo com sucesso");
-    } catch (error: any) {
-      const errorMessage = error?.response?.data?.message;
-      messageApi.error(errorMessage || "Não foi possível salvar o diagrama");
-    } finally {
-      setSaving(false);
+      const payload = savePayloadRef.current;
+      const signature = saveSignatureRef.current;
+
+      const run = async () => {
+        if (manual) setSaving(true);
+        setSaveStatus("saving");
+
+        try {
+          await api.put(`/diagram/${id}`, payload);
+
+          setSavedSignature(signature);
+          setLastSavedAt(new Date());
+          setSaveStatus("saved");
+
+          const thumbnailDue =
+            Date.now() - lastThumbnailAtRef.current >= THUMBNAIL_INTERVAL_MS;
+
+          if (manual || thumbnailDue) {
+            lastThumbnailAtRef.current = Date.now();
+            const thumbnail = await captureThumbnail();
+
+            if (thumbnail) {
+              const formData = new FormData();
+              formData.append("thumbnail", thumbnail, "thumbnail.jpg");
+              await api.put(`/diagram/${id}/thumbnail`, formData);
+            }
+          }
+
+          if (manual) messageApi.success("Diagrama salvo com sucesso");
+        } catch (error: any) {
+          setSaveStatus("error");
+          const errorMessage = error?.response?.data?.message;
+          messageApi.error(
+            errorMessage ||
+              (manual
+                ? "Não foi possível salvar o diagrama"
+                : "Não foi possível salvar automaticamente"),
+          );
+        } finally {
+          if (manual) setSaving(false);
+        }
+      };
+
+      const promise = run();
+      saveInFlightRef.current = promise;
+      await promise;
+      saveInFlightRef.current = null;
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [id, messageApi],
+  );
+
+  const handleSave = useCallback(
+    () => persistDiagram({ manual: true }),
+    [persistDiagram],
+  );
+
+  useEffect(() => {
+    if (loaded && savedSignature === null) {
+      setSavedSignature(saveSignature);
     }
-  }, [diagramName, edges, id, messageApi, nodes]);
+  }, [loaded, savedSignature, saveSignature]);
+
+  useEffect(() => {
+    if (!isDirty || isViewer) return;
+
+    setSaveStatus((prev) => (prev === "saving" ? prev : "pending"));
+
+    const timer = setTimeout(() => {
+      persistDiagram({ manual: false });
+    }, AUTOSAVE_DELAY_MS);
+
+    return () => clearTimeout(timer);
+  }, [isDirty, isViewer, saveSignature, persistDiagram]);
+
+  useEffect(() => {
+    if (!isDirty || isViewer) return;
+
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [isDirty, isViewer]);
+
+  useEffect(() => {
+    const diagramId = id;
+
+    return () => {
+      const pending =
+        savedSignatureRef.current !== null &&
+        saveSignatureRef.current !== savedSignatureRef.current;
+
+      if (diagramId && pending && !isViewerRef.current) {
+        api.put(`/diagram/${diagramId}`, savePayloadRef.current).catch(() => {});
+      }
+    };
+  }, [id]);
 
   const handleGenerate = useCallback(
     async (prompt: string) => {
@@ -1030,6 +1147,8 @@ const ConstructorPage: React.FC = () => {
         onDiagramNameChange={setDiagramName}
         onSave={handleSave}
         saving={saving}
+        saveStatus={isViewer ? "idle" : saveStatus}
+        lastSavedAt={lastSavedAt}
         nodes={nodes}
         edges={edges}
         setNodes={setNodesCompat}
@@ -1064,6 +1183,7 @@ const ConstructorPage: React.FC = () => {
           onGenerate={handleGenerate}
           generating={generating}
           diagramName={diagramName}
+          onDiagramNameChange={setDiagramName}
           nodes={nodes}
           edges={edges}
           readOnly={isViewer}

@@ -4,6 +4,7 @@ import {
   AppstoreOutlined,
   BorderOutlined,
   DatabaseOutlined,
+  EditOutlined,
   ExportOutlined,
   FileOutlined,
   FontSizeOutlined,
@@ -39,6 +40,7 @@ interface Props {
   onGenerate?: (prompt: string) => void;
   generating?: boolean;
   diagramName: string;
+  onDiagramNameChange: (name: string) => void;
   nodes: CustomNode[];
   edges: CustomEdge[];
   readOnly?: boolean;
@@ -52,6 +54,7 @@ export function SidebarConstructor({
   onGenerate,
   generating,
   diagramName,
+  onDiagramNameChange,
   nodes,
   edges,
   readOnly = false,
@@ -157,9 +160,9 @@ export function SidebarConstructor({
 
       <div
         style={{
-          paddingTop: 20,
+          paddingTop: 14,
           borderBottom: "1px solid #e5e7eb",
-          paddingBottom: 30,
+          paddingBottom: 14,
         }}
       >
         <div
@@ -167,7 +170,35 @@ export function SidebarConstructor({
             display: "flex",
             alignItems: "center",
             gap: 8,
-            paddingBottom: 10,
+            paddingBottom: 8,
+          }}
+        >
+          <EditOutlined style={{ color: "#1677ff", fontSize: 16 }} />
+          <span style={{ fontWeight: "bold" }}>Nome do diagrama</span>
+        </div>
+
+        <Input
+          value={diagramName}
+          onChange={(e) => onDiagramNameChange(e.target.value)}
+          placeholder="Nome do diagrama"
+          aria-label="Nome do diagrama"
+          disabled={readOnly}
+        />
+      </div>
+
+      <div
+        style={{
+          paddingTop: 14,
+          borderBottom: "1px solid #e5e7eb",
+          paddingBottom: 16,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            paddingBottom: 8,
           }}
         >
           <RobotOutlined style={{ color: "#1677ff", fontSize: 16 }} />
@@ -176,7 +207,7 @@ export function SidebarConstructor({
 
         <Input.TextArea
           placeholder="Descreva seu banco de dados..."
-          autoSize={{ minRows: 3, maxRows: 5 }}
+          autoSize={{ minRows: 2, maxRows: 5 }}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           disabled={generating}
@@ -186,7 +217,7 @@ export function SidebarConstructor({
           style={{
             display: "flex",
             justifyContent: "flex-end",
-            paddingTop: 10,
+            paddingTop: 8,
           }}
         >
           <Button
@@ -206,9 +237,9 @@ export function SidebarConstructor({
 
       <div
         style={{
-          paddingTop: 20,
+          paddingTop: 14,
           borderBottom: "1px solid #e5e7eb",
-          paddingBottom: 20,
+          paddingBottom: 14,
         }}
       >
         <div
@@ -216,7 +247,7 @@ export function SidebarConstructor({
             display: "flex",
             alignItems: "center",
             gap: 8,
-            paddingBottom: 10,
+            paddingBottom: 8,
           }}
         >
           <AppstoreOutlined style={{ color: "#2F7D32", fontSize: 16 }} />
@@ -259,9 +290,9 @@ export function SidebarConstructor({
 
       <div
         style={{
-          paddingTop: 20,
+          paddingTop: 14,
           borderBottom: "1px solid #e5e7eb",
-          paddingBottom: 20,
+          paddingBottom: 14,
         }}
       >
         <div
@@ -269,7 +300,7 @@ export function SidebarConstructor({
             display: "flex",
             alignItems: "center",
             gap: 8,
-            paddingBottom: 10,
+            paddingBottom: 8,
           }}
         >
           <DatabaseOutlined style={{ color: "#fa8c16", fontSize: 16 }} />
@@ -288,7 +319,7 @@ export function SidebarConstructor({
 
       <div
         style={{
-          paddingTop: 20,
+          paddingTop: 14,
           paddingBottom: 10,
         }}
       >
@@ -297,7 +328,7 @@ export function SidebarConstructor({
             display: "flex",
             alignItems: "center",
             gap: 8,
-            paddingBottom: 10,
+            paddingBottom: 8,
           }}
         >
           <ExportOutlined style={{ color: "#1677ff", fontSize: 16 }} />
