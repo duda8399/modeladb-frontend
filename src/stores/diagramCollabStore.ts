@@ -138,6 +138,17 @@ function applyStyleAxis(
   return true;
 }
 
+/**
+ * Ao inserir um item novo (nó, campo ou aresta), o próprio ADD passa a ser a
+ * versão inicial do registro `deleted`. Sem isso, um ADD repetido por um
+ * "refazer" que chegue antes do ADD original e do DELETE do "desfazer"
+ * deixaria réplicas em estados diferentes, conforme a ordem de chegada.
+ */
+function stampInsertion<T extends Record<string, unknown>>(target: T, op: Operation): T {
+  applyLWWRegister(target, "deleted", false, op.lamport, op.userId);
+  return target;
+}
+
 function cloneField(field: CollabField): CollabField {
   return { ...field, _crdt: field._crdt ? { ...field._crdt } : undefined };
 }
@@ -226,6 +237,7 @@ function executeAddNode(get: Get, set: Set, op: Operation) {
   }
 
   const node: CollabNode = structuredClone(op.payload);
+  node.data = stampInsertion({ ...node.data }, op);
   const nextNodes = [...get().nodes, node];
   get().nodeIndex.set(node.id, node);
   set({ nodes: nextNodes });
@@ -305,7 +317,10 @@ function executeDeleteNode(get: Get, set: Set, op: Operation) {
 }
 
 function executeRestoreNode(get: Get, set: Set, op: Operation) {
-  if (!get().nodeIndex.has(op.targetId)) return;
+  if (!get().nodeIndex.has(op.targetId)) {
+    addPendingOperation(get, op.targetId, op);
+    return;
+  }
 
   updateNodeById(get, set, op.targetId, (node) => {
     const data = { ...node.data };
@@ -337,7 +352,7 @@ function executeAddField(get: Get, set: Set, op: Operation) {
       return { ...node, data: { ...node.data, fields: nextFields } };
     }
 
-    const field: CollabField = structuredClone(op.payload);
+    const field = stampInsertion(structuredClone(op.payload) as CollabField & Record<string, unknown>, op);
     return { ...node, data: { ...node.data, fields: [...fields, field] } };
   });
 
@@ -408,7 +423,12 @@ function applyEdgeMutation(
 ) {
   const edges = get().edges;
   const index = edges.findIndex((e) => e.id === op.targetId);
-  if (index === -1) return;
+  if (index === -1) {
+    // A aresta ainda não chegou (entrega fora de ordem): guarda a operação
+    // para reaplicar assim que o ADD_EDGE correspondente for recebido.
+    addPendingOperation(get, op.targetId, op);
+    return;
+  }
 
   const data = { ...(edges[index].data || {}) };
   if (!applyLWWRegister(data, key, value, op.lamport, op.userId)) return;
@@ -429,9 +449,12 @@ function executeAddEdge(get: Get, set: Set, op: Operation) {
   }
 
   const edge: CollabEdge = structuredClone(op.payload);
+  edge.data = stampInsertion({ ...(edge.data || {}) }, op);
   const nextEdges = [...get().edges, edge];
   get().edgeIndex.set(edge.id, edge);
   set({ edges: nextEdges });
+
+  processPendingOperations(get, set, edge.id);
 }
 
 function executeDeleteEdge(get: Get, set: Set, op: Operation) {
@@ -632,6 +655,13 @@ export const useDiagramCollabStore = create<DiagramCollabState>()((set, get) => 
 
     appliedOps.set(op.opId, Date.now());
     cleanupAppliedOpsIfNeeded(get, set);
+
+    // Regra de recebimento do relógio de Lamport: o relógio local precisa
+    // avançar além de qualquer operação vista, senão a próxima edição local
+    // sairia com um lamport menor e perderia o LWW para uma edição anterior.
+    if (typeof op.lamport === "number" && op.lamport > get().lamport) {
+      set({ lamport: op.lamport });
+    }
 
     execute(get, set, op);
 
