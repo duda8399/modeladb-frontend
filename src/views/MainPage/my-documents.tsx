@@ -15,6 +15,7 @@ import { AppLayout } from "../../components/LayoutComponents/AppLayout";
 import { api } from "../../services/api";
 import { getCurrentUser, getToken } from "../../utils/auth";
 import { DiagramCard } from "../../components/DashboardComponents/DiagramCard";
+import { DocumentsLoading } from "../../components/DashboardComponents/DocumentsLoading";
 import CreateDiagramModal from "../../components/DashboardComponents/CreateDiagramModal";
 
 const { Title } = Typography;
@@ -29,6 +30,7 @@ interface Project {
 const MyDocumentsPage: React.FC = () => {
   const navigate = useNavigate();
   const [documents, setDocuments] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isCreateDiagramModalOpen, setIsCreateDiagramModalOpen] =
     useState(false);
@@ -112,6 +114,8 @@ const MyDocumentsPage: React.FC = () => {
       setDocuments(data);
     } catch (e) {
       console.log(e);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -198,41 +202,47 @@ const MyDocumentsPage: React.FC = () => {
         style={{ maxWidth: "100%", width: 450, marginTop: 15 }}
       />
 
-      <Row
-        gutter={[24, 24]}
-        style={{ marginTop: 24, flex: 1, alignContent: "flex-start" }}
-      >
-        {paginatedDocuments.map((doc) => (
-          <Col key={doc.id} xs={24} sm={24} md={12} lg={8}>
-            <DiagramCard
-              document={doc}
-              onDelete={deleteDocument}
-              isDeleting={deletingId === doc.id}
+      {loading ? (
+        <DocumentsLoading />
+      ) : (
+        <>
+          <Row
+            gutter={[24, 24]}
+            style={{ marginTop: 24, flex: 1, alignContent: "flex-start" }}
+          >
+            {paginatedDocuments.map((doc) => (
+              <Col key={doc.id} xs={24} sm={24} md={12} lg={8}>
+                <DiagramCard
+                  document={doc}
+                  onDelete={deleteDocument}
+                  isDeleting={deletingId === doc.id}
+                />
+              </Col>
+            ))}
+          </Row>
+
+          {filteredDocuments.length === 0 && (
+            <Empty
+              description={
+                searchTerm
+                  ? "Nenhum documento encontrado"
+                  : "Você ainda não possui documentos"
+              }
+              style={{ marginTop: 32 }}
             />
-          </Col>
-        ))}
-      </Row>
+          )}
 
-      {filteredDocuments.length === 0 && (
-        <Empty
-          description={
-            searchTerm
-              ? "Nenhum documento encontrado"
-              : "Você ainda não possui documentos"
-          }
-          style={{ marginTop: 32 }}
-        />
-      )}
-
-      {filteredDocuments.length > pageSize && (
-        <Row justify="center" style={{ marginTop: 24, marginBottom: 24 }}>
-          <Pagination
-            current={currentPage}
-            pageSize={pageSize}
-            total={filteredDocuments.length}
-            onChange={(page) => setCurrentPage(page)}
-          />
-        </Row>
+          {filteredDocuments.length > pageSize && (
+            <Row justify="center" style={{ marginTop: 24, marginBottom: 24 }}>
+              <Pagination
+                current={currentPage}
+                pageSize={pageSize}
+                total={filteredDocuments.length}
+                onChange={(page) => setCurrentPage(page)}
+              />
+            </Row>
+          )}
+        </>
       )}
     </AppLayout>
   );

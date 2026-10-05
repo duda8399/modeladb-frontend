@@ -3,6 +3,7 @@ import { Col, message, Row, Typography } from "antd";
 import { useNavigate } from "react-router-dom";
 import { ProjectCard } from "../../components/DashboardComponents/ProjectCard";
 import { DiagramCard } from "../../components/DashboardComponents/DiagramCard";
+import { DocumentsLoading } from "../../components/DashboardComponents/DocumentsLoading";
 import { AppLayout } from "../../components/LayoutComponents/AppLayout";
 import { DatabaseOutlined, RobotOutlined } from "@ant-design/icons";
 import { api } from "../../services/api";
@@ -23,9 +24,12 @@ const MainPage: React.FC = () => {
   const navigate = useNavigate();
   const userId = localStorage.getItem("userId") || undefined;
   const [messageApi, contextHolder] = message.useMessage();
-  const [isCreateDiagramModalOpen, setIsCreateDiagramModalOpen] = useState(false);
-  const [isGenerateDiagramModalOpen, setIsGenerateDiagramModalOpen] = useState(false);
+  const [isCreateDiagramModalOpen, setIsCreateDiagramModalOpen] =
+    useState(false);
+  const [isGenerateDiagramModalOpen, setIsGenerateDiagramModalOpen] =
+    useState(false);
   const [recent, setRecent] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -41,6 +45,8 @@ const MainPage: React.FC = () => {
       setRecent(data);
     } catch (e) {
       console.log(e);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -63,7 +69,7 @@ const MainPage: React.FC = () => {
       const { data: generated } = await api.post(
         "/openai/generate-diagram",
         { description: prompt },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: `Bearer ${token}` } },
       );
 
       const { data: diagram } = await api.post("/diagram/create", {
@@ -82,7 +88,7 @@ const MainPage: React.FC = () => {
           nodes: generated?.nodes ?? [],
           edges: generated?.edges ?? [],
         },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: `Bearer ${token}` } },
       );
 
       setIsGenerateDiagramModalOpen(false);
@@ -103,14 +109,20 @@ const MainPage: React.FC = () => {
       setRecent((prev) => prev.filter((p) => p.id !== id));
       messageApi.success("Diagrama excluído com sucesso.");
     } catch (error: any) {
-      messageApi.error(error?.response?.data?.message || "Não foi possível excluir o diagrama.");
+      messageApi.error(
+        error?.response?.data?.message ||
+          "Não foi possível excluir o diagrama.",
+      );
     } finally {
       setDeletingId(null);
     }
   };
 
   const recentDocuments = [...recent]
-    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .sort(
+      (a, b) =>
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    )
     .slice(0, 8);
 
   return (
@@ -156,17 +168,21 @@ const MainPage: React.FC = () => {
       <div style={{ marginTop: 48 }}>
         <Title level={4}>Documentos recentes</Title>
 
-        <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-          {recentDocuments.map((project) => (
-            <Col key={project.id} xs={24} sm={12} lg={8} xl={6}>
-              <DiagramCard
-                document={project}
-                isDeleting={deletingId === project.id}
-                onDelete={handleDelete}
-              />
-            </Col>
-          ))}
-        </Row>
+        {loading ? (
+          <DocumentsLoading />
+        ) : (
+          <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+            {recentDocuments.map((project) => (
+              <Col key={project.id} xs={24} sm={12} lg={8} xl={6}>
+                <DiagramCard
+                  document={project}
+                  isDeleting={deletingId === project.id}
+                  onDelete={handleDelete}
+                />
+              </Col>
+            ))}
+          </Row>
+        )}
       </div>
     </AppLayout>
   );
