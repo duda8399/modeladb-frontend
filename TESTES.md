@@ -36,6 +36,7 @@ FC_NUM_RUNS=20000 npx vitest run src/stores/diagramCollabStore.convergence.test.
 | `src/utils/sqlExport.test.ts` | DDL de MySQL e PostgreSQL, tipos, saneamento, FKs 1:N e N:N, execução no pg-mem e gramática do MySQL |
 | `src/utils/sqlImport.test.ts` | Importação de SQL: MySQL, PostgreSQL, dumps do pg_dump e phpMyAdmin, 1:1/1:N/N:N, tamanhos, DEFAULT, CHECK, ações de FK, índices, views, layout, entradas inválidas e ida e volta exportar → importar → exportar |
 | `src/utils/viewSql.test.ts` | Análise da consulta de views: tabelas de FROM/JOIN, CTEs, subconsultas e colunas de saída |
+| `src/utils/diagramDiff.test.ts` e `versionLabels.test.ts` | Comparação entre versões (tabelas, colunas, índices, CHECK, views, relacionamentos) e títulos das versões |
 | `src/utils/sqlExport.engines.test.ts` | Os 32 tipos da interface em bancos reais e a matriz de compatibilidade (`reports/sql-compatibility.md`) |
 | `src/services/realtimeService.test.ts` | Contrato do cliente Socket.IO com o gateway, com socket simulado |
 | `src/utils/*.test.ts` | Leitura do token e cores/iniciais de presença |
@@ -45,6 +46,7 @@ FC_NUM_RUNS=20000 npx vitest run src/stores/diagramCollabStore.convergence.test.
 | `e2e/sql-import.spec.ts` | Importa um `.sql` pelo botão "Importar", confere entidades/arestas no canvas e o salvamento |
 | `e2e/views-indexes.spec.ts` | Índices e views: importação, modal de índices, nova view com consulta, linhas até as tabelas, exportação e persistência |
 | `e2e/logical-model.spec.ts` | Tamanho/precisão, DEFAULT, CHECK, ON DELETE/ON UPDATE e participação: importação, edição, sincronização com um segundo usuário e exportação |
+| `e2e/version-history.spec.ts` | Histórico: versão automática e manual, pré-visualização com mudanças, restauração avisando outro colaborador, persistência e leitor sem ações |
 | `e2e/perf.spec.ts` | Gera `reports/perf/ui-latency.{md,json}` |
 
 ## Falhas conhecidas documentadas

@@ -100,6 +100,17 @@ describe("realtimeService", () => {
     expect(h.onError).toHaveBeenCalledWith({ message: "Sem permissão para editar" });
   });
 
+  it("repassa document_restored para o callback de restauração", async () => {
+    const service = await loadService();
+    const onDocumentRestored = vi.fn();
+    service.connect({ diagramId: "d1", token: "t", ...handlers(), onDocumentRestored });
+
+    const event = { diagramId: "d1", versionId: "v1", userId: "u", userName: "Ana" };
+    sockets[0].fire("document_restored", event);
+
+    expect(onDocumentRestored).toHaveBeenCalledWith(event);
+  });
+
   it("não abre uma segunda conexão se já estiver conectado", async () => {
     const service = await loadService();
 

@@ -1,4 +1,5 @@
 import { Button, ColorPicker, Divider, Select, Space } from "antd";
+import { HistoryOutlined } from "@ant-design/icons";
 import {
   AlignCenterOutlined,
   AlignLeftOutlined,
@@ -92,6 +93,7 @@ interface EditorToolbarProps {
   onPatchSelectedTextNodes: (patch: Record<string, unknown>) => void;
   onlineUsers: PresenceUser[];
   onOpenShare: () => void;
+  onOpenHistory: () => void;
   readOnly?: boolean;
   bgColorActive: boolean;
   bgColor: string;
@@ -117,6 +119,7 @@ export function EditorToolbar({
   onPatchSelectedTextNodes,
   onlineUsers,
   onOpenShare,
+  onOpenHistory,
   readOnly = false,
   bgColorActive,
   bgColor,
@@ -467,6 +470,9 @@ export function EditorToolbar({
         <SaveStatusText status={saveStatus} lastSavedAt={lastSavedAt} />
         <Button type="primary" onClick={onSave} loading={saving} disabled={readOnly}>
           Salvar
+        </Button>
+        <Button title="Histórico de versões" icon={<HistoryOutlined />} onClick={onOpenHistory}>
+          Histórico
         </Button>
         {!readOnly && (
           <ImportButton

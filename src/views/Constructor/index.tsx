@@ -21,7 +21,6 @@ import {
   getNodesBounds,
   getViewportForBounds,
   useReactFlow,
-  MarkerType,
   type NodeProps,
 } from "reactflow";
 import { SidebarConstructor } from "./SidebarConstructor";
@@ -38,12 +37,13 @@ import { EdgeActionsContext } from "../../components/ConstructorComponents/EdgeA
 import FloatingEdge from "../../components/ConstructorComponents/FloatingEdge";
 import ViewNode from "../../components/ConstructorComponents/ViewNode";
 import ViewEdge from "../../components/ConstructorComponents/ViewEdge";
+import VersionHistoryDrawer from "../../components/ConstructorComponents/VersionHistoryDrawer";
+import { versionsService } from "../../services/versionsService";
 import RelationshipModal, {
   type RelationshipChanges,
   type RelationshipDetails,
 } from "../../components/ConstructorComponents/RelationshipModal";
-import { analyzeViewSql } from "../../utils/viewSql";
-import { normalizeSqlName } from "../../utils/identifiers";
+import { buildViewEdges, viewSources, type ViewSource } from "../../utils/viewEdges";
 import type {
   CustomEdge,
   CustomNode,
@@ -57,6 +57,7 @@ import { api } from "../../services/api";
 import { getCurrentUser, getToken } from "../../utils/auth";
 import realtimeService, {
   type CursorEvent,
+  type DocumentRestoredEvent,
   type PresenceUser,
 } from "../../services/realtimeService";
 import { colorForUserId } from "../../utils/presence";
@@ -110,6 +111,9 @@ const ConstructorPage: React.FC = () => {
   >(null);
   const [showShareModal, setShowShareModal] = useState(false);
   const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const documentRestoredRef = useRef<((event: DocumentRestoredEvent) => void) | null>(null);
+  const ownRestoreRef = useRef<string | null>(null);
   const reactFlowContainerRef = useRef<HTMLDivElement>(null);
   const dragStartPositionsRef = useRef<Record<string, { x: number; y: number }>>(
     {},
@@ -432,41 +436,12 @@ const ConstructorPage: React.FC = () => {
 
   const edgeTypes = useMemo(() => ({ floating: FloatingEdge, viewEdge: ViewEdge }), []);
 
-  const viewSourcesKey = useMemo(
-    () =>
-      JSON.stringify(
-        nodes
-          .filter((node) => node.type === "entityNode" || node.type === "viewNode")
-          .map((node) => {
-            const data = node.data as { name?: string; sql?: string } | undefined;
-            return [node.id, node.type, data?.name ?? "", data?.sql ?? ""];
-          }),
-      ),
-    [nodes],
+  const viewSourcesKey = useMemo(() => JSON.stringify(viewSources(nodes)), [nodes]);
+
+  const viewEdges = useMemo<CustomEdge[]>(
+    () => buildViewEdges(JSON.parse(viewSourcesKey) as ViewSource[]),
+    [viewSourcesKey],
   );
-
-  const viewEdges = useMemo<CustomEdge[]>(() => {
-    const entries = JSON.parse(viewSourcesKey) as [string, string, string, string][];
-    const idByName = new Map(entries.map(([nodeId, , name]) => [normalizeSqlName(name), nodeId]));
-
-    return entries
-      .filter(([, type]) => type === "viewNode")
-      .flatMap(([viewId, , , sql]) =>
-        analyzeViewSql(sql)
-          .tables.map((table) => idByName.get(normalizeSqlName(table)))
-          .filter((sourceId): sourceId is string => !!sourceId && sourceId !== viewId)
-          .map((sourceId) => ({
-            id: `view-source:${viewId}:${sourceId}`,
-            source: sourceId,
-            target: viewId,
-            type: "viewEdge",
-            selectable: false,
-            deletable: false,
-            focusable: false,
-            markerEnd: { type: MarkerType.ArrowClosed, color: "#90A4AE" },
-          })),
-      );
-  }, [viewSourcesKey]);
 
   const renderedEdges = useMemo(() => [...edges, ...viewEdges], [edges, viewEdges]);
   const edgeActions = useMemo(
@@ -562,6 +537,54 @@ const ConstructorPage: React.FC = () => {
     }
   }, [userId, syncFromStore]);
 
+  const applyServerDiagram = useCallback(
+    (data: {
+      name?: string;
+      nodes?: CustomNode[];
+      edges?: CustomEdge[];
+      currentUserRole?: "OWNER" | "EDITOR" | "VIEWER" | null;
+    }) => {
+      const loadedName = data?.name || "";
+      const loadedNodes = Array.isArray(data?.nodes) ? data.nodes : [];
+      let loadedEdges = Array.isArray(data?.edges) ? data.edges : [];
+
+      loadedEdges = loadedEdges.map((edge: any) => {
+        // Arestas antigas eram "bezier" com handle fixo; convertemos para
+        // "floating" para que o traçado acompanhe a posição das tabelas.
+        const normalizedEdge = { ...edge, type: "floating" };
+
+        if (!edge.data) {
+          const sourceNode = loadedNodes.find(
+            (n: any) => n.id === edge.source,
+          );
+          const sourceName = (sourceNode?.data as any)?.name || edge.source;
+
+          return {
+            ...normalizedEdge,
+            data: {
+              relationType: "1:1",
+              sourceNodeId: edge.source,
+              targetNodeId: edge.target,
+              fkFieldName: `fk_${sourceName}_id`,
+            },
+          };
+        }
+        return normalizedEdge;
+      });
+
+      setDiagramName(loadedName);
+      setNodes(loadedNodes);
+      setEdges(loadedEdges);
+      setCurrentUserRole(data?.currentUserRole ?? null);
+      setSavedSignature(null);
+
+      useDiagramCollabStore
+        .getState()
+        .loadDocument(loadedNodes as CollabNode[], loadedEdges as CollabEdge[]);
+    },
+    [setNodes, setEdges],
+  );
+
   useEffect(() => {
     const loadDiagram = async () => {
       if (!id) return;
@@ -573,43 +596,8 @@ const ConstructorPage: React.FC = () => {
       try {
         const { data } = await api.get(`/diagram/${id}`);
 
-        const loadedName = data?.name || "";
-        const loadedNodes = Array.isArray(data?.nodes) ? data.nodes : [];
-        let loadedEdges = Array.isArray(data?.edges) ? data.edges : [];
-
-        loadedEdges = loadedEdges.map((edge: any) => {
-          // Arestas antigas eram "bezier" com handle fixo; convertemos para
-          // "floating" para que o traçado acompanhe a posição das tabelas.
-          const normalizedEdge = { ...edge, type: "floating" };
-
-          if (!edge.data) {
-            const sourceNode = loadedNodes.find(
-              (n: any) => n.id === edge.source,
-            );
-            const sourceName = (sourceNode?.data as any)?.name || edge.source;
-
-            return {
-              ...normalizedEdge,
-              data: {
-                relationType: "1:1",
-                sourceNodeId: edge.source,
-                targetNodeId: edge.target,
-                fkFieldName: `fk_${sourceName}_id`,
-              },
-            };
-          }
-          return normalizedEdge;
-        });
-
-        setDiagramName(loadedName);
-        setNodes(loadedNodes);
-        setEdges(loadedEdges);
-        setCurrentUserRole(data?.currentUserRole ?? null);
+        applyServerDiagram(data);
         setLoaded(true);
-
-        useDiagramCollabStore
-          .getState()
-          .loadDocument(loadedNodes as CollabNode[], loadedEdges as CollabEdge[]);
 
         const token = getToken();
 
@@ -661,6 +649,7 @@ const ConstructorPage: React.FC = () => {
               }));
             },
             onError: (error) => messageApi.error(error.message),
+            onDocumentRestored: (event) => documentRestoredRef.current?.(event),
           });
         }
       } catch (error: any) {
@@ -1139,6 +1128,55 @@ const ConstructorPage: React.FC = () => {
     [persistDiagram],
   );
 
+  const flushPendingSave = useCallback(async () => {
+    if (saveInFlightRef.current) await saveInFlightRef.current;
+    const pending =
+      savedSignatureRef.current !== null &&
+      saveSignatureRef.current !== savedSignatureRef.current;
+    if (pending && !isViewerRef.current) await persistDiagram({ manual: false });
+  }, [persistDiagram]);
+
+  const restoreVersion = useCallback(
+    async (versionId: string) => {
+      if (!id) return;
+      try {
+        await flushPendingSave();
+        ownRestoreRef.current = versionId;
+        const restored = await versionsService.restore(id, versionId);
+        applyServerDiagram(restored);
+        setSaveStatus("saved");
+        setLastSavedAt(new Date());
+        messageApi.success("Versão restaurada. O estado anterior ficou guardado no histórico.");
+      } catch (error: any) {
+        messageApi.error(error?.response?.data?.message || "Não foi possível restaurar a versão.");
+        throw error;
+      }
+    },
+    [id, flushPendingSave, applyServerDiagram, messageApi],
+  );
+
+  documentRestoredRef.current = async (event: DocumentRestoredEvent) => {
+    if (!id || event.diagramId !== id) return;
+    if (ownRestoreRef.current === event.versionId) {
+      ownRestoreRef.current = null;
+      return;
+    }
+    try {
+      const { data } = await api.get(`/diagram/${id}`);
+      applyServerDiagram(data);
+      messageApi.info(
+        `${event.userName ?? "Um colaborador"} restaurou uma versão anterior. O diagrama foi atualizado.`,
+      );
+    } catch {
+      messageApi.error("Uma versão foi restaurada, mas não foi possível recarregar o diagrama.");
+    }
+  };
+
+  const currentSnapshot = useMemo(
+    () => ({ name: diagramName, nodes: savePayload.nodes as CustomNode[], edges: savePayload.edges as CustomEdge[] }),
+    [diagramName, savePayload],
+  );
+
   useEffect(() => {
     if (loaded && savedSignature === null) {
       setSavedSignature(saveSignature);
@@ -1283,6 +1321,19 @@ const ConstructorPage: React.FC = () => {
         onSelect={onSelectRelationType}
       />
 
+      {id && (
+        <VersionHistoryDrawer
+          open={historyOpen}
+          onClose={() => setHistoryOpen(false)}
+          diagramId={id}
+          canEdit={!isViewer}
+          isOwner={isOwner}
+          current={currentSnapshot}
+          onBeforeSnapshot={flushPendingSave}
+          onRestore={restoreVersion}
+        />
+      )}
+
       {editingEdgeId && editingDetails && (
         <RelationshipModal
           key={editingEdgeId}
@@ -1323,6 +1374,7 @@ const ConstructorPage: React.FC = () => {
         onPatchSelectedTextNodes={onPatchSelectedTextNodes}
         onlineUsers={Object.values(onlineUsers)}
         onOpenShare={() => setShowShareModal(true)}
+        onOpenHistory={() => setHistoryOpen(true)}
         readOnly={isViewer}
         bgColorActive={bgColorMode}
         bgColor={currentBgColor}

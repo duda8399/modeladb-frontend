@@ -12,6 +12,13 @@ export type CursorEvent = { userId: string; x: number; y: number };
 
 export type RealtimeError = { message: string };
 
+export type DocumentRestoredEvent = {
+  diagramId: string;
+  versionId: string;
+  userId: string;
+  userName: string | null;
+};
+
 type ConnectParams = {
   diagramId: string;
   token: string;
@@ -19,6 +26,7 @@ type ConnectParams = {
   onPresence: (event: PresenceEvent) => void;
   onCursor: (cursor: CursorEvent) => void;
   onError?: (error: RealtimeError) => void;
+  onDocumentRestored?: (event: DocumentRestoredEvent) => void;
 };
 
 class RealtimeService {
@@ -39,6 +47,7 @@ class RealtimeService {
     socket.on("presence", params.onPresence);
     socket.on("cursor", params.onCursor);
     socket.on("error", (error: RealtimeError) => params.onError?.(error));
+    socket.on("document_restored", (event: DocumentRestoredEvent) => params.onDocumentRestored?.(event));
 
     this.socket = socket;
   }
