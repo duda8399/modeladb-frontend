@@ -3,6 +3,7 @@ import { Input, Button, Modal, Form, message } from "antd";
 import {
   AppstoreOutlined,
   BorderOutlined,
+  BulbOutlined,
   DatabaseOutlined,
   EditOutlined,
   ExportOutlined,
@@ -39,6 +40,7 @@ interface Props {
   onAddSection: () => void;
   onAddText: () => void;
   onGenerate?: (prompt: string) => void;
+  onAnalyze?: () => void;
   generating?: boolean;
   diagramName: string;
   onDiagramNameChange: (name: string) => void;
@@ -54,6 +56,7 @@ export function SidebarConstructor({
   onAddSection,
   onAddText,
   onGenerate,
+  onAnalyze,
   generating,
   diagramName,
   onDiagramNameChange,
@@ -67,6 +70,7 @@ export function SidebarConstructor({
   const [messageApi, contextHolder] = message.useMessage();
   const [tokenForm] = Form.useForm();
   const [sqlModalOpen, setSqlModalOpen] = useState(false);
+  const [tokenPurpose, setTokenPurpose] = useState<"generate" | "analyze">("generate");
   const [sqlDialect, setSqlDialect] = useState<SqlDialect>("mysql");
 
   async function validateOpenAIToken(token: string): Promise<boolean> {
@@ -88,17 +92,26 @@ export function SidebarConstructor({
       return;
     }
 
+    if (await ensureOpenAIToken("generate")) onGenerate?.(prompt);
+  }
+
+  async function ensureOpenAIToken(purpose: "generate" | "analyze"): Promise<boolean> {
     const user = getCurrentUser();
-    if (!user) return;
+    if (!user) return false;
 
     const { data } = await api.get(`/user/${user.id}`);
 
     if (!data.openaiToken) {
+      setTokenPurpose(purpose);
       setModalOpen(true);
-      return;
+      return false;
     }
 
-    onGenerate?.(prompt);
+    return true;
+  }
+
+  async function handleAnalyzeClick() {
+    if (await ensureOpenAIToken("analyze")) onAnalyze?.();
   }
 
   function handleExportSql(dialect: SqlDialect) {
@@ -137,7 +150,8 @@ export function SidebarConstructor({
       messageApi.success("Chave de API salva com sucesso!");
       setModalOpen(false);
       tokenForm.resetFields();
-      onGenerate?.(prompt);
+      if (tokenPurpose === "analyze") onAnalyze?.();
+      else onGenerate?.(prompt);
     } catch {
       messageApi.error("Erro ao salvar a chave de API.");
     } finally {
@@ -235,6 +249,10 @@ export function SidebarConstructor({
             Gerar
           </Button>
         </div>
+
+        <Button block icon={<BulbOutlined />} onClick={handleAnalyzeClick} style={{ marginTop: 8 }}>
+          Analisar modelo
+        </Button>
       </div>
 
       <div

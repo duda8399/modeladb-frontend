@@ -38,6 +38,8 @@ import FloatingEdge from "../../components/ConstructorComponents/FloatingEdge";
 import ViewNode from "../../components/ConstructorComponents/ViewNode";
 import ViewEdge from "../../components/ConstructorComponents/ViewEdge";
 import VersionHistoryDrawer from "../../components/ConstructorComponents/VersionHistoryDrawer";
+import AiAnalysisDrawer from "../../components/ConstructorComponents/AiAnalysisDrawer";
+import { findTable, planSuggestion, type AiAnalysis, type AiSuggestion } from "../../utils/aiSuggestions";
 import { versionsService } from "../../services/versionsService";
 import RelationshipModal, {
   type RelationshipChanges,
@@ -83,7 +85,7 @@ const THUMBNAIL_INTERVAL_MS = 30000;
 const ConstructorPage: React.FC = () => {
   const { id } = useParams();
   const [messageApi, contextHolder] = message.useMessage();
-  const { getNodes, screenToFlowPosition, flowToScreenPosition } =
+  const { getNodes, screenToFlowPosition, flowToScreenPosition, fitView } =
     useReactFlow();
   const [nodes, setNodes, onNodesChange] = useNodesState<CustomNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<CustomEdge>([]);
@@ -112,6 +114,12 @@ const ConstructorPage: React.FC = () => {
   const [showShareModal, setShowShareModal] = useState(false);
   const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [analysis, setAnalysis] = useState<AiAnalysis | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [appliedSuggestions, setAppliedSuggestions] = useState<Set<string>>(() => new Set());
+  const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(() => new Set());
   const documentRestoredRef = useRef<((event: DocumentRestoredEvent) => void) | null>(null);
   const ownRestoreRef = useRef<string | null>(null);
   const reactFlowContainerRef = useRef<HTMLDivElement>(null);
@@ -1172,6 +1180,58 @@ const ConstructorPage: React.FC = () => {
     }
   };
 
+  const runAnalysis = useCallback(
+    async (focus: string) => {
+      setAnalyzing(true);
+      setAnalysisError(null);
+      try {
+        const { data } = await api.post<AiAnalysis>("/openai/analyze-diagram", {
+          diagramName,
+          nodes: savePayloadRef.current.nodes,
+          edges: savePayloadRef.current.edges,
+          focus,
+        });
+        setAnalysis(data);
+        setAppliedSuggestions(new Set());
+        setDismissedSuggestions(new Set());
+      } catch (error) {
+        const serverMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+        setAnalysisError(serverMessage || "Não foi possível analisar o modelo.");
+      } finally {
+        setAnalyzing(false);
+      }
+    },
+    [diagramName],
+  );
+
+  const applySuggestion = useCallback(
+    (suggestion: AiSuggestion) => {
+      if (!suggestion.action) return;
+      const { nodes: storeNodes, edges: storeEdges } = useDiagramCollabStore.getState();
+      const plan = planSuggestion(suggestion.action, storeNodes, storeEdges);
+      if ("error" in plan) {
+        messageApi.warning(plan.error);
+        return;
+      }
+      plan.ops.forEach((op) => sendOp(op));
+      setAppliedSuggestions((current) => new Set(current).add(suggestion.id));
+      messageApi.success("Sugestão aplicada. Use Desfazer para reverter.");
+    },
+    [messageApi, sendOp],
+  );
+
+  const locateSuggestion = useCallback(
+    (suggestion: AiSuggestion) => {
+      const table = findTable(useDiagramCollabStore.getState().nodes, suggestion.table);
+      if (!table) {
+        messageApi.info(`A tabela ${suggestion.table} não está no diagrama.`);
+        return;
+      }
+      fitView({ nodes: [{ id: table.id }], duration: 400, maxZoom: 1.2, padding: 0.6 });
+    },
+    [fitView, messageApi],
+  );
+
   const currentSnapshot = useMemo(
     () => ({ name: diagramName, nodes: savePayload.nodes as CustomNode[], edges: savePayload.edges as CustomEdge[] }),
     [diagramName, savePayload],
@@ -1321,6 +1381,22 @@ const ConstructorPage: React.FC = () => {
         onSelect={onSelectRelationType}
       />
 
+      <AiAnalysisDrawer
+        open={analysisOpen}
+        onClose={() => setAnalysisOpen(false)}
+        analysis={analysis}
+        analyzing={analyzing}
+        error={analysisError}
+        canApply={!isViewer}
+        applied={appliedSuggestions}
+        dismissed={dismissedSuggestions}
+        onAnalyze={runAnalysis}
+        onApply={applySuggestion}
+        onDismiss={(suggestion) => setDismissedSuggestions((current) => new Set(current).add(suggestion.id))}
+        onShowDismissed={() => setDismissedSuggestions(new Set())}
+        onLocate={locateSuggestion}
+      />
+
       {id && (
         <VersionHistoryDrawer
           open={historyOpen}
@@ -1391,6 +1467,7 @@ const ConstructorPage: React.FC = () => {
       >
         <SidebarConstructor
           onAddEntity={addEntityNode}
+          onAnalyze={() => setAnalysisOpen(true)}
           onAddView={addViewNode}
           onAddNote={addNoteNode}
           onAddSection={addSectionNode}
