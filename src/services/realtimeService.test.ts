@@ -61,17 +61,38 @@ describe("realtimeService", () => {
     ioMock.mockClear();
   });
 
-  it("envia o JWT no handshake", async () => {
+  it("envia o JWT no handshake, pedindo um token válido a cada conexão", async () => {
     const service = await loadService();
+    const getToken = vi.fn().mockResolvedValueOnce("jwt-123").mockResolvedValueOnce("jwt-456");
 
-    service.connect({ diagramId: "d1", token: "jwt-123", ...handlers() });
+    service.connect({ diagramId: "d1", getToken, ...handlers() });
 
-    expect(ioMock.mock.calls[0][1]).toEqual({ auth: { token: "jwt-123" } });
+    const { auth } = ioMock.mock.calls[0][1] as {
+      auth: (cb: (data: object) => void) => void;
+    };
+    const first = await new Promise((resolve) => auth(resolve));
+    const second = await new Promise((resolve) => auth(resolve));
+
+    expect(first).toEqual({ token: "jwt-123" });
+    expect(second).toEqual({ token: "jwt-456" });
+  });
+
+  it("repassa role_changed e access_revoked", async () => {
+    const service = await loadService();
+    const onRoleChanged = vi.fn();
+    const onAccessRevoked = vi.fn();
+    service.connect({ diagramId: "d1", getToken: () => "t", ...handlers(), onRoleChanged, onAccessRevoked });
+
+    sockets[0].fire("role_changed", { diagramId: "d1", role: "VIEWER" });
+    sockets[0].fire("access_revoked", { diagramId: "d1", reason: "removed" });
+
+    expect(onRoleChanged).toHaveBeenCalledWith({ diagramId: "d1", role: "VIEWER" });
+    expect(onAccessRevoked).toHaveBeenCalledWith({ diagramId: "d1", reason: "removed" });
   });
 
   it("entra na sala do diagrama a cada conexão, inclusive após reconectar", async () => {
     const service = await loadService();
-    service.connect({ diagramId: "d1", token: "t", ...handlers() });
+    service.connect({ diagramId: "d1", getToken: () => "t", ...handlers() });
     const socket = sockets[0];
 
     socket.fire("connect");
@@ -86,7 +107,7 @@ describe("realtimeService", () => {
   it("repassa operation, presence, cursor e error para os callbacks", async () => {
     const service = await loadService();
     const h = handlers();
-    service.connect({ diagramId: "d1", token: "t", ...h });
+    service.connect({ diagramId: "d1", getToken: () => "t", ...h });
     const socket = sockets[0];
 
     socket.fire("operation", { opId: "x" });
@@ -103,7 +124,7 @@ describe("realtimeService", () => {
   it("repassa document_restored para o callback de restauração", async () => {
     const service = await loadService();
     const onDocumentRestored = vi.fn();
-    service.connect({ diagramId: "d1", token: "t", ...handlers(), onDocumentRestored });
+    service.connect({ diagramId: "d1", getToken: () => "t", ...handlers(), onDocumentRestored });
 
     const event = { diagramId: "d1", versionId: "v1", userId: "u", userName: "Ana" };
     sockets[0].fire("document_restored", event);
@@ -114,8 +135,8 @@ describe("realtimeService", () => {
   it("não abre uma segunda conexão se já estiver conectado", async () => {
     const service = await loadService();
 
-    service.connect({ diagramId: "d1", token: "t", ...handlers() });
-    service.connect({ diagramId: "d2", token: "t", ...handlers() });
+    service.connect({ diagramId: "d1", getToken: () => "t", ...handlers() });
+    service.connect({ diagramId: "d2", getToken: () => "t", ...handlers() });
 
     expect(ioMock).toHaveBeenCalledTimes(1);
   });
@@ -123,7 +144,7 @@ describe("realtimeService", () => {
   it("não envia operações nem cursores antes de conectar", async () => {
     const service = await loadService();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    service.connect({ diagramId: "d1", token: "t", ...handlers() });
+    service.connect({ diagramId: "d1", getToken: () => "t", ...handlers() });
 
     service.sendOperation({ opId: "1", type: "MOVE_NODE", targetId: "n", userId: "u", lamport: 1 });
     service.sendCursor({ x: 1, y: 1 });
@@ -135,7 +156,7 @@ describe("realtimeService", () => {
 
   it("envia operações e cursores depois de conectar", async () => {
     const service = await loadService();
-    service.connect({ diagramId: "d1", token: "t", ...handlers() });
+    service.connect({ diagramId: "d1", getToken: () => "t", ...handlers() });
     sockets[0].fire("connect");
 
     const op = { opId: "1", type: "MOVE_NODE" as const, targetId: "n", userId: "u", lamport: 1 };
@@ -150,10 +171,10 @@ describe("realtimeService", () => {
 
   it("disconnect encerra o socket e permite conectar de novo", async () => {
     const service = await loadService();
-    service.connect({ diagramId: "d1", token: "t", ...handlers() });
+    service.connect({ diagramId: "d1", getToken: () => "t", ...handlers() });
 
     service.disconnect();
-    service.connect({ diagramId: "d2", token: "t", ...handlers() });
+    service.connect({ diagramId: "d2", getToken: () => "t", ...handlers() });
 
     expect(sockets[0].disconnected).toBe(true);
     expect(ioMock).toHaveBeenCalledTimes(2);

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getCurrentUser, getToken, isAuthenticated } from "./auth";
+import { clearSession, getCurrentUser, getRefreshToken, getToken, isAuthenticated, setSession } from "./auth";
 
 function fakeJwt(payload: object) {
   const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString("base64url");
@@ -14,6 +14,7 @@ describe("auth (frontend)", () => {
     vi.stubGlobal("localStorage", {
       getItem: (k: string) => storage[k] ?? null,
       setItem: (k: string, v: string) => (storage[k] = v),
+      removeItem: (k: string) => delete storage[k],
     });
   });
 
@@ -49,5 +50,33 @@ describe("auth (frontend)", () => {
 
     expect(getCurrentUser()).toBeNull();
     expect(isAuthenticated()).toBe(false);
+  });
+
+  it("access token expirado com refresh token válido continua autenticado", () => {
+    storage.accessToken = fakeJwt({ sub: "u1", exp: Date.now() / 1000 - 1 });
+    storage.refreshToken = fakeJwt({ sub: "u1", exp: Date.now() / 1000 + 3600 });
+
+    expect(isAuthenticated()).toBe(true);
+  });
+
+  it("access e refresh expirados não contam como autenticado", () => {
+    storage.accessToken = fakeJwt({ sub: "u1", exp: Date.now() / 1000 - 1 });
+    storage.refreshToken = fakeJwt({ sub: "u1", exp: Date.now() / 1000 - 1 });
+
+    expect(isAuthenticated()).toBe(false);
+  });
+
+  it("setSession grava e clearSession apaga os dados da sessão", () => {
+    setSession({ accessToken: "a", refreshToken: "r", userId: "u1", avatarUrl: null });
+
+    expect(getToken()).toBe("a");
+    expect(getRefreshToken()).toBe("r");
+    expect(storage.userId).toBe("u1");
+
+    clearSession();
+
+    expect(getToken()).toBeNull();
+    expect(getRefreshToken()).toBeNull();
+    expect(storage.userId).toBeUndefined();
   });
 });

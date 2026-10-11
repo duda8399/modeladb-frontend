@@ -2,6 +2,7 @@ import { Typography, Input, Button, Divider, Form, message, Row } from "antd";
 import { LockOutlined, MailOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../services/api";
+import { setSession } from "../../utils/auth";
 import { useState } from "react";
 import { AuthLayout } from "../../components/LayoutComponents/AuthLayout";
 import Background from "../../assets/fundo.png";
@@ -23,11 +24,9 @@ export default function LoginPage() {
       setLoading(true);
 
       const response = await api.post("/auth/login", data);
-      const { userId, accessToken, avatarUrl } = response.data;
+      const { userId, accessToken, refreshToken, avatarUrl } = response.data;
 
-      localStorage.setItem("accessToken", accessToken);
-      localStorage.setItem("userId", userId);
-      localStorage.setItem("avatar", avatarUrl);
+      setSession({ accessToken, refreshToken, userId, avatarUrl });
       navigate("/");
     } catch (error: any) {
       const errorMessage = error?.response?.data?.message;

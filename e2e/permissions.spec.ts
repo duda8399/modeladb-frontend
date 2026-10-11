@@ -1,5 +1,7 @@
-import { expect, test } from "@playwright/test";
+import { expect, request, test } from "@playwright/test";
 import {
+  BACKEND_URL,
+  type User,
   addEntity,
   createDiagramViaApi,
   createUser,
@@ -11,6 +13,13 @@ import {
   renameEntity,
   shareViaApi,
 } from "./support";
+
+async function ownerApi(owner: User) {
+  return request.newContext({
+    baseURL: BACKEND_URL,
+    extraHTTPHeaders: { Authorization: `Bearer ${owner.token}` },
+  });
+}
 
 /**
  * Item 5 — Papéis e compartilhamento vistos pela interface.
@@ -129,5 +138,47 @@ test.describe("Permissões e compartilhamento", () => {
     await expect(page.getByText("Sem acesso a este diagrama.").first()).toBeVisible();
     await expect(entityNodes(page)).toHaveCount(0);
     await expect(page.getByPlaceholder("Nome do diagrama")).not.toHaveValue("Segredo");
+  });
+
+  test("rebaixar um EDITOR com o diagrama aberto deixa a tela dele somente leitura na hora", async ({ browser }) => {
+    const owner = await createUser("dono");
+    const editor = await createUser("editor");
+    const diagramId = await createDiagramViaApi(owner);
+    await shareViaApi(owner, diagramId, editor, "EDITOR");
+
+    const editorPage = await (await loggedInContext(browser, editor)).newPage();
+    const assertNoErrors = failOnPageErrors(editorPage);
+    await openDiagram(editorPage, diagramId);
+    await expect(editorPage.getByRole("button", { name: "Salvar", exact: true })).toBeEnabled();
+
+    const api = await ownerApi(owner);
+    expect((await api.patch(`/diagram/${diagramId}/collaborators/${editor.id}`, { data: { role: "VIEWER" } })).ok()).toBe(true);
+    await api.dispose();
+
+    await expect(editorPage.getByText("Sua permissão mudou para Leitor")).toBeVisible();
+    await expect(editorPage.getByRole("button", { name: "Salvar", exact: true })).toBeDisabled();
+    await expect(editorPage.getByRole("button", { name: "Importar" })).toHaveCount(0);
+    assertNoErrors();
+  });
+
+  test("remover um colaborador com o diagrama aberto avisa e leva de volta aos compartilhados", async ({ browser }) => {
+    const owner = await createUser("dono");
+    const editor = await createUser("editor");
+    const diagramId = await createDiagramViaApi(owner);
+    await shareViaApi(owner, diagramId, editor, "EDITOR");
+
+    const editorPage = await (await loggedInContext(browser, editor)).newPage();
+    const assertNoErrors = failOnPageErrors(editorPage);
+    await openDiagram(editorPage, diagramId);
+
+    const api = await ownerApi(owner);
+    expect((await api.delete(`/diagram/${diagramId}/collaborators/${editor.id}`)).ok()).toBe(true);
+    await api.dispose();
+
+    const dialog = editorPage.locator(".ant-modal").filter({ hasText: "Acesso removido" });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Voltar" }).click();
+    await expect(editorPage).toHaveURL(/\/shared$/);
+    assertNoErrors();
   });
 });

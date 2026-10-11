@@ -19,14 +19,25 @@ export type DocumentRestoredEvent = {
   userName: string | null;
 };
 
+export type CollaboratorRole = "EDITOR" | "VIEWER";
+
+export type RoleChangedEvent = { diagramId: string; role: CollaboratorRole };
+
+export type AccessRevokedEvent = {
+  diagramId: string;
+  reason: "left" | "removed" | "deleted";
+};
+
 type ConnectParams = {
   diagramId: string;
-  token: string;
+  getToken: () => Promise<string | null> | string | null;
   onOperation: (operation: Operation) => void;
   onPresence: (event: PresenceEvent) => void;
   onCursor: (cursor: CursorEvent) => void;
   onError?: (error: RealtimeError) => void;
   onDocumentRestored?: (event: DocumentRestoredEvent) => void;
+  onRoleChanged?: (event: RoleChangedEvent) => void;
+  onAccessRevoked?: (event: AccessRevokedEvent) => void;
 };
 
 class RealtimeService {
@@ -36,7 +47,11 @@ class RealtimeService {
     if (this.socket) return;
 
     const socket = io(import.meta.env.VITE_BACKEND_URL, {
-      auth: { token: params.token },
+      auth: (cb) => {
+        Promise.resolve(params.getToken())
+          .then((token) => cb({ token: token ?? "" }))
+          .catch(() => cb({ token: "" }));
+      },
     });
 
     socket.on("connect", () => {
@@ -48,6 +63,8 @@ class RealtimeService {
     socket.on("cursor", params.onCursor);
     socket.on("error", (error: RealtimeError) => params.onError?.(error));
     socket.on("document_restored", (event: DocumentRestoredEvent) => params.onDocumentRestored?.(event));
+    socket.on("role_changed", (event: RoleChangedEvent) => params.onRoleChanged?.(event));
+    socket.on("access_revoked", (event: AccessRevokedEvent) => params.onAccessRevoked?.(event));
 
     this.socket = socket;
   }

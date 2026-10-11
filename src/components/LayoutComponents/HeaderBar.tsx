@@ -7,6 +7,7 @@ import {
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { logout } from "../../services/auth.service";
 const { Header } = Layout;
 
 type HeaderBarProps = {
@@ -54,8 +55,7 @@ export function HeaderBar({ collapsed, setCollapsed }: HeaderBarProps) {
 
   const handleMenuClick: MenuProps["onClick"] = ({ key }) => {
     if (key === "logout") {
-      localStorage.removeItem("userId");
-      localStorage.removeItem("accessToken");
+      void logout();
       navigate("/login");
     }
 

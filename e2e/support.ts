@@ -3,7 +3,14 @@ import { randomUUID } from "node:crypto";
 
 export const BACKEND_URL = "http://127.0.0.1:3101";
 
-export type User = { id: string; name: string; email: string; password: string; token: string };
+export type User = {
+  id: string;
+  name: string;
+  email: string;
+  password: string;
+  token: string;
+  refreshToken: string;
+};
 
 /** Cria um usuário real no backend de teste (via API, mais rápido que a UI). */
 export async function createUser(prefix: string): Promise<User> {
@@ -17,7 +24,7 @@ export async function createUser(prefix: string): Promise<User> {
   const body = await login.json();
   await api.dispose();
 
-  return { id: body.userId, name, email, password, token: body.accessToken };
+  return { id: body.userId, name, email, password, token: body.accessToken, refreshToken: body.refreshToken };
 }
 
 export async function createDiagramViaApi(owner: User, name = "Diagrama E2E"): Promise<string> {
@@ -54,11 +61,13 @@ export async function getDiagramViaApi(user: User, diagramId: string) {
 export async function loggedInContext(browser: Browser, user: User): Promise<BrowserContext> {
   const context = await browser.newContext();
   await context.addInitScript(
-    ([token, userId]) => {
+    ([token, refreshToken, userId]) => {
+      if (localStorage.getItem("accessToken")) return;
       localStorage.setItem("accessToken", token);
+      localStorage.setItem("refreshToken", refreshToken);
       localStorage.setItem("userId", userId);
     },
-    [user.token, user.id],
+    [user.token, user.refreshToken, user.id],
   );
   return context;
 }

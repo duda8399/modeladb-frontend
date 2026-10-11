@@ -20,7 +20,9 @@ export default function ForgotPasswordPage() {
       setLoading(true);
 
       await api.post("/auth/forgot-password", { email: values.email });
-      messageApi.success("E-mail de recuperação de senha enviado.");
+      messageApi.success(
+        "Se o e-mail estiver cadastrado, você receberá um link para redefinir a senha.",
+      );
 
       form.resetFields();
     } catch (error: any) {

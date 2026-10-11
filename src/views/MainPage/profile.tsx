@@ -13,9 +13,22 @@ import {
 } from "antd";
 import { UserOutlined, UploadOutlined, DeleteOutlined } from "@ant-design/icons";
 import { AppLayout } from "../../components/LayoutComponents/AppLayout";
+import axios from "axios";
 import { api } from "../../services/api";
 
 const { Title, Text } = Typography;
+
+const AVATAR_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+
+function apiErrorMessage(error: unknown, fallback: string): string {
+  if (!axios.isAxiosError(error)) return fallback;
+  if (error.response?.status === 413) return "A imagem deve ter no máximo 2 MB.";
+
+  const message = (error.response?.data as { message?: unknown } | undefined)?.message;
+  if (Array.isArray(message)) return message[0] ?? fallback;
+  return typeof message === "string" ? message : fallback;
+}
 
 const ProfilePage: React.FC = () => {
   const [avatarPreview, setAvatarPreview] = useState<string | undefined>();
@@ -24,21 +37,24 @@ const ProfilePage: React.FC = () => {
   const [messageApi, contextHolder] = message.useMessage();
   const [form] = Form.useForm();
 
+  const [openaiTokenHint, setOpenaiTokenHint] = useState<string | null>(null);
+
   useEffect(() => {
-    const id = localStorage.getItem("userId");
-    if (id) loadUser(id);
+    loadUser();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function loadUser(id: string) {
+  async function loadUser() {
     try {
       setLoading(true);
 
-      const { data } = await api.get(`/user/${id}`);
+      const { data } = await api.get("/user/me");
 
       form.setFieldsValue({
         name: data.name,
-        openaiToken: data.openaiToken ?? "",
+        openaiToken: "",
       });
+      setOpenaiTokenHint(data.hasOpenaiToken ? data.openaiTokenHint : null);
 
       if (data.avatarUrl) {
         setAvatarPreview(data.avatarUrl);
@@ -76,8 +92,6 @@ const ProfilePage: React.FC = () => {
         }
       }
 
-      const id = localStorage.getItem("userId");
-
       const formData = new FormData();
       formData.append("name", values.name);
 
@@ -85,7 +99,9 @@ const ProfilePage: React.FC = () => {
         formData.append("password", values.password);
       }
 
-      formData.append("openaiToken", token);
+      if (token) {
+        formData.append("openaiToken", token);
+      }
 
       if (avatarFile) {
         formData.append("avatar", avatarFile);
@@ -93,11 +109,15 @@ const ProfilePage: React.FC = () => {
         formData.append("avatarUrl", "");
       }
 
-      const { data } = await api.put(`/user/${id}`, formData, {
+      const { data } = await api.put("/user/me", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
         },
       });
+
+      setOpenaiTokenHint(data.hasOpenaiToken ? data.openaiTokenHint : null);
+      form.setFieldsValue({ openaiToken: "", password: "", confirmPassword: "" });
+      setAvatarFile(null);
 
       const newAvatarUrl = data.avatarUrl ?? "";
       localStorage.setItem("avatar", newAvatarUrl);
@@ -105,10 +125,46 @@ const ProfilePage: React.FC = () => {
 
       messageApi.success("Perfil atualizado com sucesso!");
     } catch (error) {
-      messageApi.error("Erro ao atualizar perfil");
+      messageApi.error(apiErrorMessage(error, "Erro ao atualizar perfil"));
     } finally {
       setLoading(false);
     }
+  }
+
+  async function removeOpenAIToken() {
+    try {
+      setLoading(true);
+
+      const formData = new FormData();
+      formData.append("openaiToken", "");
+
+      await api.put("/user/me", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      setOpenaiTokenHint(null);
+      messageApi.success("Chave da OpenAI removida.");
+    } catch (error) {
+      messageApi.error(apiErrorMessage(error, "Erro ao remover a chave"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleAvatarSelected(file: File) {
+    if (!AVATAR_TYPES.includes(file.type)) {
+      messageApi.error("Envie uma imagem PNG, JPEG, GIF ou WebP.");
+      return Upload.LIST_IGNORE;
+    }
+
+    if (file.size > MAX_AVATAR_BYTES) {
+      messageApi.error("A imagem deve ter no máximo 2 MB.");
+      return Upload.LIST_IGNORE;
+    }
+
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+    return false;
   }
 
   return (
@@ -134,11 +190,8 @@ const ProfilePage: React.FC = () => {
 
             <Upload
               showUploadList={false}
-              beforeUpload={(file) => {
-                setAvatarFile(file);
-                setAvatarPreview(URL.createObjectURL(file));
-                return false;
-              }}
+              accept={AVATAR_TYPES.join(",")}
+              beforeUpload={handleAvatarSelected}
             >
               <Button icon={<UploadOutlined />} style={{ width: 140, height: "31.7px", padding: "0 16px" }}>Alterar foto</Button>
             </Upload>
@@ -210,13 +263,30 @@ const ProfilePage: React.FC = () => {
             <Form.Item
               label="Token da OpenAI"
               name="openaiToken"
-              extra="Seu token é armazenado com segurança e usado para gerar sugestões com IA."
+              extra={
+                openaiTokenHint
+                  ? `Chave cadastrada (termina em ${openaiTokenHint.replace("…", "")}). Ela fica criptografada e nunca é exibida. Preencha apenas para substituí-la.`
+                  : "Seu token é armazenado criptografado e usado para gerar sugestões com IA."
+              }
             >
               <Input.Password
                 size="large"
-                placeholder="sk-..."
+                placeholder={openaiTokenHint ? `sk-...${openaiTokenHint.replace("…", "")}` : "sk-..."}
               />
             </Form.Item>
+
+            {openaiTokenHint && (
+              <div style={{ marginBottom: 24 }}>
+                <Button
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={removeOpenAIToken}
+                  disabled={loading}
+                >
+                  Remover chave da OpenAI
+                </Button>
+              </div>
+            )}
 
             <Button
               type="primary"

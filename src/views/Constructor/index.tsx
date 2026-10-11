@@ -24,7 +24,7 @@ import {
   type NodeProps,
 } from "reactflow";
 import { SidebarConstructor } from "./SidebarConstructor";
-import { Layout, message } from "antd";
+import { Button, Layout, Modal, message } from "antd";
 import { Navbar } from "../../components/LayoutComponents/Navbar";
 import { EditorToolbar, type SaveStatus } from "./EditorToolbar";
 import EntityNode from "../../components/ConstructorComponents/EntityNode";
@@ -54,8 +54,8 @@ import type {
   TableIndex,
   ViewNodeData,
 } from "../../types/diagramER";
-import { useParams } from "react-router-dom";
-import { api } from "../../services/api";
+import { useNavigate, useParams } from "react-router-dom";
+import { api, getValidAccessToken } from "../../services/api";
 import { getCurrentUser, getToken } from "../../utils/auth";
 import realtimeService, {
   type CursorEvent,
@@ -112,6 +112,8 @@ const ConstructorPage: React.FC = () => {
     "OWNER" | "EDITOR" | "VIEWER" | null
   >(null);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [accessLost, setAccessLost] = useState<"removed" | "deleted" | null>(null);
+  const navigate = useNavigate();
   const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [analysisOpen, setAnalysisOpen] = useState(false);
@@ -607,12 +609,10 @@ const ConstructorPage: React.FC = () => {
         applyServerDiagram(data);
         setLoaded(true);
 
-        const token = getToken();
-
-        if (token && userId) {
+        if (userId) {
           realtimeService.connect({
             diagramId: id,
-            token,
+            getToken: getValidAccessToken,
             onOperation: (operation) => {
               useDiagramCollabStore.getState().applyOperation(operation, false);
               syncFromStore();
@@ -658,6 +658,22 @@ const ConstructorPage: React.FC = () => {
             },
             onError: (error) => messageApi.error(error.message),
             onDocumentRestored: (event) => documentRestoredRef.current?.(event),
+            onRoleChanged: (event) => {
+              setCurrentUserRole(event.role);
+              messageApi.info(
+                event.role === "VIEWER"
+                  ? "Sua permissão mudou para Leitor. O diagrama agora está somente leitura."
+                  : "Sua permissão mudou para Editor. Agora você pode editar o diagrama.",
+              );
+            },
+            onAccessRevoked: (event) => {
+              if (event.reason === "left") return;
+              setCurrentUserRole("VIEWER");
+              setOnlineUsers({});
+              setCursors({});
+              realtimeService.disconnect();
+              setAccessLost(event.reason);
+            },
           });
         }
       } catch (error: any) {
@@ -1375,6 +1391,22 @@ const ConstructorPage: React.FC = () => {
       }}
     >
       {contextHolder}
+      <Modal
+        open={accessLost !== null}
+        closable={false}
+        maskClosable={false}
+        keyboard={false}
+        title={accessLost === "deleted" ? "Diagrama excluído" : "Acesso removido"}
+        footer={
+          <Button type="primary" onClick={() => navigate(accessLost === "deleted" ? "/" : "/shared")}>
+            Voltar
+          </Button>
+        }
+      >
+        {accessLost === "deleted"
+          ? "O dono excluiu este diagrama. As alterações feitas a partir de agora não serão salvas."
+          : "O dono removeu o seu acesso a este diagrama. As alterações feitas a partir de agora não serão salvas."}
+      </Modal>
       <RelationModal
         open={openRelationModal}
         onCancel={() => setOpenRelationModal(false)}

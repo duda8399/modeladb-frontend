@@ -15,7 +15,6 @@ import {
 } from "@ant-design/icons";
 import { SiMysql, SiPostgresql } from "react-icons/si";
 import { api } from "../../services/api";
-import { getCurrentUser } from "../../utils/auth";
 import type { SqlDialect } from "../../utils/sqlExport";
 import type { CustomEdge, CustomNode } from "../../types/diagramER";
 import { SqlExportModal } from "../../components/ConstructorComponents/SqlExportModal";
@@ -96,12 +95,9 @@ export function SidebarConstructor({
   }
 
   async function ensureOpenAIToken(purpose: "generate" | "analyze"): Promise<boolean> {
-    const user = getCurrentUser();
-    if (!user) return false;
+    const { data } = await api.get("/user/me");
 
-    const { data } = await api.get(`/user/${user.id}`);
-
-    if (!data.openaiToken) {
+    if (!data.hasOpenaiToken) {
       setTokenPurpose(purpose);
       setModalOpen(true);
       return false;
@@ -138,12 +134,9 @@ export function SidebarConstructor({
         return;
       }
 
-      const user = getCurrentUser();
-      if (!user) return;
-
       const formData = new FormData();
       formData.append("openaiToken", token);
-      await api.put(`/user/${user.id}`, formData, {
+      await api.put("/user/me", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 

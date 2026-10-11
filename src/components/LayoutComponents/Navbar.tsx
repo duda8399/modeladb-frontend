@@ -16,6 +16,7 @@ import {
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import LogoFull from "../../assets/logo2.png";
+import { logout } from "../../services/auth.service";
 
 const { Header } = Layout;
 
@@ -50,8 +51,7 @@ export function Navbar() {
 
   const handleMenuClick: MenuProps["onClick"] = ({ key }) => {
     if (key === "logout") {
-      localStorage.removeItem("userId");
-      localStorage.removeItem("accessToken");
+      void logout();
       navigate("/login");
     }
 
