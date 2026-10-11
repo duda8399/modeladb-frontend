@@ -39,11 +39,16 @@ FC_NUM_RUNS=20000 npx vitest run src/stores/diagramCollabStore.convergence.test.
 | `src/utils/diagramDiff.test.ts` e `versionLabels.test.ts` | Comparação entre versões (tabelas, colunas, índices, CHECK, views, relacionamentos) e títulos das versões |
 | `src/utils/aiSuggestions.test.ts` | Ações sugeridas pela IA convertidas em operações colaborativas e aplicadas no store (inclusive desfazer e recusas) |
 | `src/utils/sqlExport.engines.test.ts` | Os 32 tipos da interface em bancos reais e a matriz de compatibilidade (`reports/sql-compatibility.md`) |
-| `src/services/realtimeService.test.ts` | Contrato do cliente Socket.IO com o gateway, com socket simulado |
+| `src/services/realtimeService.test.ts` | Contrato do cliente Socket.IO com o gateway, com socket simulado: fila de edições offline, sincronização ao reconectar, recarga quando o log não cobre o intervalo e estados da conexão |
+| `src/services/api.test.ts` | Renovação da sessão com refresh token, repetição após 401, refresh único entre requisições e abas, saída para o login |
+| `src/utils/fieldOps.test.ts` | Diferença entre campos antes e depois do modal de atributos, sem reenviar remoções de campos já apagados |
+| `src/utils/relationshipOps.test.ts` | Operações geradas ao criar relacionamentos 1:1, 1:N e N:N |
+| `src/components/ErrorBoundary.test.ts` | Captura de erros de renderização e fallback |
 | `src/utils/*.test.ts` | Leitura do token e cores/iniciais de presença |
-| `e2e/auth.spec.ts` | Cadastro, login e redirecionamento pela interface |
+| `e2e/auth.spec.ts` | Cadastro, login, redirecionamento, renovação de sessão expirada e esqueci a senha |
 | `e2e/collaboration.spec.ts` | Dois usuários reais: presença, cursores, entidades, atributos, desfazer, concorrência, salvar |
-| `e2e/permissions.spec.ts` | Convite pelo modal, leitor sem edição, usuário sem acesso |
+| `e2e/permissions.spec.ts` | Convite pelo modal, leitor sem edição, usuário sem acesso, rebaixamento e remoção com o diagrama aberto |
+| `e2e/reconnection.spec.ts` | Conexão derrubada no meio da edição: indicador de status, fila de alterações e convergência dos dois lados ao reconectar |
 | `e2e/sql-import.spec.ts` | Importa um `.sql` pelo botão "Importar", confere entidades/arestas no canvas e o salvamento |
 | `e2e/views-indexes.spec.ts` | Índices e views: importação, modal de índices, nova view com consulta, linhas até as tabelas, exportação e persistência |
 | `e2e/logical-model.spec.ts` | Tamanho/precisão, DEFAULT, CHECK, ON DELETE/ON UPDATE e participação: importação, edição, sincronização com um segundo usuário e exportação |

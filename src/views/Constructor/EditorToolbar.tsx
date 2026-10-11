@@ -19,7 +19,8 @@ import type { Dispatch, SetStateAction } from "react";
 import type { CustomEdge, CustomNode } from "../../types/diagramER";
 import { ExportButton } from "../../components/ConstructorComponents/ExportButton";
 import { ImportButton } from "../../components/ConstructorComponents/ImportButton";
-import type { PresenceUser } from "../../services/realtimeService";
+import type { ConnectionStatus, PresenceUser } from "../../services/realtimeService";
+import { ConnectionStatusBadge } from "../../components/ConstructorComponents/ConnectionStatusBadge";
 import { colorForUserId, initialFor } from "../../utils/presence";
 
 const fontGroups = [
@@ -92,6 +93,8 @@ interface EditorToolbarProps {
   onBeforeImportReplace: () => void;
   onPatchSelectedTextNodes: (patch: Record<string, unknown>) => void;
   onlineUsers: PresenceUser[];
+  connectionStatus?: ConnectionStatus;
+  pendingOperations?: number;
   onOpenShare: () => void;
   onOpenHistory: () => void;
   readOnly?: boolean;
@@ -118,6 +121,8 @@ export function EditorToolbar({
   onBeforeImportReplace,
   onPatchSelectedTextNodes,
   onlineUsers,
+  connectionStatus,
+  pendingOperations = 0,
   onOpenShare,
   onOpenHistory,
   readOnly = false,
@@ -467,6 +472,9 @@ export function EditorToolbar({
       </Space>
 
       <Space wrap>
+        {connectionStatus && (
+          <ConnectionStatusBadge status={connectionStatus} pendingCount={pendingOperations} />
+        )}
         <SaveStatusText status={saveStatus} lastSavedAt={lastSavedAt} />
         <Button type="primary" onClick={onSave} loading={saving} disabled={readOnly}>
           Salvar
