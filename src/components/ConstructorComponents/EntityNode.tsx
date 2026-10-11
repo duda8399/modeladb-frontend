@@ -1,11 +1,12 @@
 import { memo, useEffect, useState } from "react";
 import { Card, Row, Col, Button, Input } from "antd";
-import { CloseOutlined, KeyOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { CheckCircleOutlined, CloseOutlined, KeyOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import AttributesModal from "./AttributesModal";
-import IndexesModal from "./IndexesModal";
+import TableConstraintsModal from "./TableConstraintsModal";
+import { formatTypeWithSize } from "../../utils/sqlTypes";
 import DeleteModal from "./DeleteModal";
 import { Handle, Position } from "reactflow";
-import type { Field, TableIndex } from "../../types/diagramER";
+import type { Field, TableCheck, TableIndex } from "../../types/diagramER";
 import { FkIcon } from "./FieldIcons";
 
 interface Props {
@@ -14,11 +15,13 @@ interface Props {
     fields?: Field[];
     name?: string;
     indexes?: TableIndex[];
+    checks?: TableCheck[];
   };
   onDelete?: () => void;
   onRename?: (value: string) => void;
   onFieldsChange?: (fields: Field[]) => void;
   onIndexesChange?: (indexes: TableIndex[]) => void;
+  onChecksChange?: (checks: TableCheck[]) => void;
 }
 
 export default memo(function EntityNode({
@@ -27,9 +30,11 @@ export default memo(function EntityNode({
   onRename,
   onFieldsChange,
   onIndexesChange,
+  onChecksChange,
 }: Props) {
   const fields = data.fields || [];
   const indexes = data.indexes || [];
+  const checks = data.checks || [];
   const fieldNameById = new Map(fields.map((field) => [field.id, field.name]));
   const visibleIndexes = indexes
     .map((index) => ({
@@ -39,6 +44,7 @@ export default memo(function EntityNode({
     .filter((index) => index.columnNames.length > 0);
   const [open, setOpen] = useState(false);
   const [openIndexes, setOpenIndexes] = useState(false);
+  const [constraintsSession, setConstraintsSession] = useState(0);
   const [openDelete, setOpenDelete] = useState(false);
   const [entityName, setEntityName] = useState(data.name || "Entidade");
   const [isEditingName, setIsEditingName] = useState(false);
@@ -70,15 +76,19 @@ export default memo(function EntityNode({
         setFields={(newFields) => onFieldsChange?.(newFields)}
       />
 
-      {openIndexes && (
-        <IndexesModal
+      <TableConstraintsModal
+          key={constraintsSession}
+          open={openIndexes}
           onClose={() => setOpenIndexes(false)}
           tableName={entityName}
           fields={fields}
           indexes={indexes}
-          onSave={(newIndexes) => onIndexesChange?.(newIndexes)}
+          checks={checks}
+          onSave={(newIndexes, newChecks) => {
+            if (JSON.stringify(newIndexes) !== JSON.stringify(indexes)) onIndexesChange?.(newIndexes);
+            if (JSON.stringify(newChecks) !== JSON.stringify(checks)) onChecksChange?.(newChecks);
+          }}
         />
-      )}
 
       <Card
         size="small"
@@ -175,9 +185,13 @@ export default memo(function EntityNode({
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
               }}
-              title={field.type ?? undefined}
+              title={
+                [formatTypeWithSize(field.type, field.size), field.defaultValue && `DEFAULT ${field.defaultValue}`]
+                  .filter(Boolean)
+                  .join(" ") || undefined
+              }
             >
-              {field.type}
+              {formatTypeWithSize(field.type, field.size)}
             </Col>
           </Row>
         ))}
@@ -225,6 +239,42 @@ export default memo(function EntityNode({
           </div>
         )}
 
+        {checks.length > 0 && (
+          <div
+            data-testid="entity-checks"
+            style={{ borderTop: "1px solid #e0e0e0", background: "#fafafa", padding: "4px 8px" }}
+          >
+            {checks.map((check) => (
+              <div
+                key={check.id}
+                title={`CONSTRAINT ${check.name} CHECK (${check.expression})`}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  fontSize: 12,
+                  color: "#555555",
+                  padding: "2px 0",
+                  minWidth: 0,
+                }}
+              >
+                <CheckCircleOutlined style={{ color: "#2F7D32" }} />
+                <span
+                  style={{
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    minWidth: 0,
+                    fontFamily: "monospace",
+                  }}
+                >
+                  {check.expression}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div
           style={{
             borderTop: "1px solid #f0f0f0",
@@ -245,9 +295,12 @@ export default memo(function EntityNode({
             type="text"
             icon={<ThunderboltOutlined />}
             style={{ background: "#d9d9d9", color: "#333333" }}
-            onClick={() => setOpenIndexes(true)}
+            onClick={() => {
+              setConstraintsSession((session) => session + 1);
+              setOpenIndexes(true);
+            }}
           >
-            Índices
+            Restrições
           </Button>
         </div>
 

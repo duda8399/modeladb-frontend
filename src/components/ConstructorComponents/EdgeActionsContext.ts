@@ -5,11 +5,13 @@ import { createContext, useContext } from "react";
 // callbacks no `data` de cada aresta, que e sincronizado via colaboracao.
 interface EdgeActions {
   onRemove: (edgeId: string) => void;
+  onEdit: (edgeId: string) => void;
   readOnly: boolean;
 }
 
 export const EdgeActionsContext = createContext<EdgeActions>({
   onRemove: () => {},
+  onEdit: () => {},
   readOnly: true,
 });
 

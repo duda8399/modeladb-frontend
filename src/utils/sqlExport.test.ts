@@ -4,7 +4,7 @@ import { generateSqlBlocks, generateSqlScript } from "./sqlExport";
 import { col, lojaDiagram, manyToMany, oneToMany, pk, table } from "../test/erFixtures";
 import { ddlStatements, parseAll, runOnPgMem } from "../test/sqlEngines";
 import { PG_MEM_TYPES, diagramArb } from "../test/erArbitraries";
-import type { CustomNode, Field, TableIndex } from "../types/diagramER";
+import type { CustomNode, Field, TableCheck, TableIndex } from "../types/diagramER";
 
 /**
  * Item 2 — Exportação SQL.
@@ -310,6 +310,95 @@ describe("índices e views", () => {
   it("índices são CREATE INDEX válidos na gramática do MySQL", () => {
     const { nodes, edges } = comIndices();
     expect(() => parseAll(nodes.filter((n) => n.type !== "viewNode"), edges, "mysql")).not.toThrow();
+  });
+});
+
+describe("tamanho, DEFAULT, CHECK e ações de FK", () => {
+  const loja = () => {
+    const cliente = table("cliente", [
+      pk(),
+      col("nome", "VARCHAR", { notNull: true, size: "80" }),
+      col("saldo", "DECIMAL", { size: "10,2", defaultValue: "0" }),
+      col("status", "CHAR", { size: "1", defaultValue: "'A'" }),
+      col("criado_em", "DATETIME", { size: "3", defaultValue: "CURRENT_TIMESTAMP" }),
+      col("codigo", "VARCHAR", { size: "abc" }),
+    ]);
+    (cliente.data as { checks: TableCheck[] }).checks = [
+      { id: "c1", name: "chk_saldo", expression: "saldo >= 0" },
+      { id: "c2", name: "", expression: "status IN ('A', 'I')" },
+      { id: "c3", name: "vazio", expression: "  " },
+    ];
+    const pedido = table("pedido", [pk()]);
+    const fk = oneToMany(cliente, pedido);
+    fk.data = { ...fk.data!, onDelete: "CASCADE", onUpdate: "RESTRICT" };
+    return { nodes: [cliente, pedido], edges: [fk] };
+  };
+
+  it("MySQL: tamanho, DEFAULT e CHECK nomeado no CREATE TABLE", () => {
+    const { nodes, edges } = loja();
+    expect(generateSqlBlocks(nodes, edges, "mysql").blocks[0].sql).toBe(
+      [
+        "CREATE TABLE `cliente` (",
+        "  `id` INT NOT NULL AUTO_INCREMENT,",
+        "  `nome` VARCHAR(80) NOT NULL,",
+        "  `saldo` DECIMAL(10,2) DEFAULT 0,",
+        "  `status` CHAR(1) DEFAULT 'A',",
+        "  `criado_em` DATETIME(3) DEFAULT CURRENT_TIMESTAMP,",
+        "  `codigo` VARCHAR(255),",
+        "  PRIMARY KEY (`id`),",
+        "  CONSTRAINT `chk_saldo` CHECK (saldo >= 0),",
+        "  CONSTRAINT `chk_cliente_2` CHECK (status IN ('A', 'I'))",
+        ");",
+      ].join("\n"),
+    );
+  });
+
+  it("PostgreSQL: DATETIME(3) vira TIMESTAMP(3) e DECIMAL mantém a precisão", () => {
+    const { nodes, edges } = loja();
+    const sql = generateSqlBlocks(nodes, edges, "postgres").blocks[0].sql;
+    expect(sql).toContain('"saldo" DECIMAL(10,2) DEFAULT 0');
+    expect(sql).toContain('"criado_em" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP');
+    expect(sql).toContain('"nome" VARCHAR(80) NOT NULL');
+  });
+
+  it("ON DELETE e ON UPDATE vão para a FK", () => {
+    const { nodes, edges } = loja();
+    expect(generateSqlBlocks(nodes, edges, "mysql").foreignKeyStatements).toEqual([
+      "ALTER TABLE `pedido` ADD CONSTRAINT `fk_pedido_fk_cliente_id` FOREIGN KEY (`fk_cliente_id`) " +
+        "REFERENCES `cliente`(`id`) ON DELETE CASCADE ON UPDATE RESTRICT;",
+    ]);
+  });
+
+  it("ações das FKs da tabela associativa vêm da aresta de cada lado", () => {
+    const a = table("a", [pk()]);
+    const b = table("b", [pk()]);
+    const { junction, edges } = manyToMany(a, b);
+    edges[0].data = { ...edges[0].data!, onDelete: "CASCADE" };
+    edges[1].data = { ...edges[1].data!, onDelete: "RESTRICT" };
+    expect(generateSqlBlocks([a, b, junction], edges, "postgres").foreignKeyStatements).toEqual([
+      expect.stringMatching(/\("fk_a_id"\) REFERENCES "a"\("id"\) ON DELETE CASCADE;$/),
+      expect.stringMatching(/\("fk_b_id"\) REFERENCES "b"\("id"\) ON DELETE RESTRICT;$/),
+    ]);
+  });
+
+  it("no pg-mem, DEFAULT preenche, CHECK barra e ON DELETE CASCADE apaga em cascata", () => {
+    const { nodes, edges } = loja();
+    const saldo = (nodes[0].data as { fields: Field[] }).fields.find((f) => f.name === "saldo")!;
+    saldo.size = null;
+    const db = runOnPgMem(nodes, edges);
+
+    db.public.none(`INSERT INTO "cliente" ("nome") VALUES ('Ana')`);
+    expect(db.public.one(`SELECT "saldo", "status" FROM "cliente"`)).toEqual({ saldo: 0, status: "A" });
+    expect(() => db.public.none(`INSERT INTO "cliente" ("nome", "saldo") VALUES ('Bia', -5)`)).toThrow();
+
+    db.public.none(`INSERT INTO "pedido" ("fk_cliente_id") VALUES (1)`);
+    db.public.none(`DELETE FROM "cliente" WHERE "id" = 1`);
+    expect(db.public.many(`SELECT * FROM "pedido"`)).toEqual([]);
+  });
+
+  it("o DDL MySQL com tamanho, DEFAULT, CHECK e ações é aceito pela gramática do MySQL", () => {
+    const { nodes, edges } = loja();
+    expect(() => parseAll(nodes, edges, "mysql")).not.toThrow();
   });
 });
 

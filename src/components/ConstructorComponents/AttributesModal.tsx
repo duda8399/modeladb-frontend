@@ -14,6 +14,7 @@ import {
 } from "antd";
 import type { Field } from "../../types/diagramER";
 import { PkIcon, FkIcon } from "./FieldIcons";
+import { isSizedType, isValidSize, normalizeSize, sizePlaceholder } from "../../utils/sqlTypes";
 
 const { Title, Text } = Typography;
 
@@ -118,6 +119,53 @@ function NameCell({
   );
 }
 
+function CommitCell({
+  value: committed,
+  placeholder,
+  disabled,
+  ariaLabel,
+  validate,
+  invalidMessage,
+  onCommit,
+}: {
+  value: string;
+  placeholder?: string;
+  disabled?: boolean;
+  ariaLabel: string;
+  validate?: (value: string) => boolean;
+  invalidMessage?: string;
+  onCommit: (value: string | null) => void;
+}) {
+  const [draft, setDraft] = useState(committed);
+  const [editing, setEditing] = useState(false);
+  const value = editing ? draft : committed;
+  const invalid = !!validate && !validate(value);
+
+  return (
+    <Tooltip title={invalid ? invalidMessage : undefined} open={invalid && editing ? true : undefined}>
+      <Input
+        aria-label={ariaLabel}
+        value={value}
+        placeholder={placeholder}
+        disabled={disabled}
+        status={invalid ? "error" : undefined}
+        onChange={(e) => setDraft(e.target.value)}
+        onFocus={() => {
+          setDraft(committed);
+          setEditing(true);
+        }}
+        onBlur={() => {
+          setEditing(false);
+          const next = draft.trim();
+          if (validate && !validate(next)) return;
+          if (next !== committed) onCommit(next || null);
+        }}
+        onPressEnter={(e) => (e.target as HTMLInputElement).blur()}
+      />
+    </Tooltip>
+  );
+}
+
 export default function Attributes({
   open,
   setOpen,
@@ -179,6 +227,16 @@ export default function Attributes({
     );
   };
 
+  const changeType = (id: string, type: string) => {
+    setFields(
+      fields.map((field) =>
+        field.id === id
+          ? { ...field, type, size: isValidSize(type, field.size) ? field.size ?? null : null }
+          : field,
+      ),
+    );
+  };
+
   // Ao marcar PK, Not Null e Unique sao marcados automaticamente
   const handlePkChange = (id: string, checked: boolean) => {
     setFields(
@@ -194,7 +252,7 @@ export default function Attributes({
 
   return (
     <Modal
-      width={900}
+      width={1120}
       open={open}
       onCancel={() => setOpen(false)}
       footer={[
@@ -237,7 +295,7 @@ export default function Attributes({
         >
           <div style={{ width: 24, flexShrink: 0 }} />
           <Row gutter={16} align="middle" style={{ flex: 1 }}>
-            <Col span={5}>
+            <Col span={4}>
               <Text strong>Coluna</Text>
             </Col>
 
@@ -245,19 +303,37 @@ export default function Attributes({
             <Text strong>Tipo</Text>
           </Col>
 
-          <Col span={3} style={{ textAlign: "center" }}>
-            <Text strong>Primary Key</Text>
+          <Col span={2}>
+            <Tooltip title="Tamanho (VARCHAR, CHAR, BINARY), precisão e escala (DECIMAL) ou frações de segundo (DATETIME, TIMESTAMP, TIME)">
+              <Text strong>Tamanho</Text>
+            </Tooltip>
           </Col>
 
-          <Col span={3} style={{ textAlign: "center" }}>
-            <Text strong>Foreign Key</Text>
+          <Col span={3}>
+            <Tooltip title="Valor padrão em SQL, ex.: 0, 'ativo', CURRENT_TIMESTAMP">
+              <Text strong>Padrão</Text>
+            </Tooltip>
           </Col>
 
-          <Col span={3} style={{ textAlign: "center" }}>
-            <Text strong>Auto Increment</Text>
+          <Col span={2} style={{ textAlign: "center" }}>
+            <Tooltip title="Primary Key">
+              <Text strong>PK</Text>
+            </Tooltip>
           </Col>
 
-          <Col span={3} style={{ textAlign: "center" }}>
+          <Col span={2} style={{ textAlign: "center" }}>
+            <Tooltip title="Foreign Key">
+              <Text strong>FK</Text>
+            </Tooltip>
+          </Col>
+
+          <Col span={2} style={{ textAlign: "center" }}>
+            <Tooltip title="Auto Increment">
+              <Text strong>AI</Text>
+            </Tooltip>
+          </Col>
+
+          <Col span={2} style={{ textAlign: "center" }}>
             <Text strong>Not Null</Text>
           </Col>
 
@@ -307,7 +383,7 @@ export default function Attributes({
               <HolderOutlined />
             </div>
             <Row gutter={16} align="middle" style={{ flex: 1 }}>
-            <Col span={5}>
+            <Col span={4}>
               <NameCell
                 field={field}
                 onCommit={(value) => updateField(field.id, "name", value)}
@@ -321,12 +397,38 @@ export default function Attributes({
                 placeholder="Tipo"
                 showSearch
                 optionFilterProp="label"
-                onChange={(value) => updateField(field.id, "type", value)}
+                onChange={(value) => changeType(field.id, value)}
                 options={TYPE_OPTIONS}
               />
             </Col>
 
-            <Col span={3} style={{ textAlign: "center" }}>
+            <Col span={2}>
+              <CommitCell
+                ariaLabel="Tamanho"
+                value={field.size ?? ""}
+                placeholder={sizePlaceholder(field.type)}
+                disabled={!isSizedType(field.type)}
+                validate={(value) => isValidSize(field.type, value)}
+                invalidMessage={
+                  field.type?.toUpperCase() === "DECIMAL"
+                    ? "Use precisão ou precisão,escala, ex.: 10,2"
+                    : "Valor inválido para este tipo"
+                }
+                onCommit={(value) => updateField(field.id, "size", value ? normalizeSize(value) : null)}
+              />
+            </Col>
+
+            <Col span={3}>
+              <CommitCell
+                ariaLabel="Valor padrão"
+                value={field.defaultValue ?? ""}
+                placeholder={field.ai ? "auto" : "—"}
+                disabled={field.ai}
+                onCommit={(value) => updateField(field.id, "defaultValue", value)}
+              />
+            </Col>
+
+            <Col span={2} style={{ textAlign: "center" }}>
               <Checkbox
                 className="attr-checkbox"
                 checked={field.pk}
@@ -334,7 +436,7 @@ export default function Attributes({
               />
             </Col>
 
-            <Col span={3} style={{ textAlign: "center" }}>
+            <Col span={2} style={{ textAlign: "center" }}>
               <Checkbox
                 className="attr-checkbox"
                 checked={field.fk}
@@ -342,7 +444,7 @@ export default function Attributes({
               />
             </Col>
 
-            <Col span={3} style={{ textAlign: "center" }}>
+            <Col span={2} style={{ textAlign: "center" }}>
               <Checkbox
                 className="attr-checkbox"
                 checked={field.ai}
@@ -350,7 +452,7 @@ export default function Attributes({
               />
             </Col>
 
-            <Col span={3} style={{ textAlign: "center" }}>
+            <Col span={2} style={{ textAlign: "center" }}>
               <Checkbox
                 className="attr-checkbox"
                 checked={field.notNull}

@@ -1,4 +1,12 @@
-import type { CustomEdge, CustomNode, Field, TableIndex } from "../types/diagramER";
+import type {
+  CustomEdge,
+  CustomNode,
+  Field,
+  FkAction,
+  TableCheck,
+  TableIndex,
+} from "../types/diagramER";
+import { isValidSize, normalizeSize } from "./sqlTypes";
 
 export type SqlDialect = "mysql" | "postgres";
 
@@ -67,26 +75,47 @@ function sanitizeDatabaseName(name: string): string {
   return sanitizeIdentifier(name.trim(), "modeladb");
 }
 
-function formatMySqlType(type: string): string {
+function validSize(field: Field): string | null {
+  const size = normalizeSize(field.size);
+  return size && isValidSize(field.type, size) ? size : null;
+}
+
+function formatMySqlType(type: string, size: string | null = null): string {
   const upperType = type.toUpperCase();
+  if (size) return `${upperType}(${size})`;
   if (upperType === "VARCHAR") return "VARCHAR(255)";
   if (upperType === "CHAR") return "CHAR(1)";
   return upperType;
 }
 
-function formatPostgresType(type: string, ai: boolean): string {
+const PG_SIZED_NAMES: Record<string, string> = {
+  CHAR: "CHAR",
+  VARCHAR: "VARCHAR",
+  DECIMAL: "DECIMAL",
+  BIT: "BIT",
+  DATETIME: "TIMESTAMP",
+  TIMESTAMP: "TIMESTAMP",
+  TIME: "TIME",
+};
+
+function formatPostgresType(type: string, ai: boolean, size: string | null = null): string {
   const upperType = type.toUpperCase();
   if (ai && PG_SERIAL_MAP[upperType]) return PG_SERIAL_MAP[upperType];
+  if (size && PG_SIZED_NAMES[upperType]) return `${PG_SIZED_NAMES[upperType]}(${size})`;
   return PG_TYPE_MAP[upperType] || upperType;
 }
 
 function buildColumnLine(field: Field, dialect: SqlDialect): string {
+  const size = validSize(field);
   const typeSql =
     dialect === "mysql"
-      ? formatMySqlType(field.type as string)
-      : formatPostgresType(field.type as string, field.ai);
+      ? formatMySqlType(field.type as string, size)
+      : formatPostgresType(field.type as string, field.ai, size);
 
   const parts = [quote(field.name as string, dialect), typeSql];
+
+  const defaultValue = field.defaultValue?.trim();
+  if (defaultValue && !field.ai) parts.push(`DEFAULT ${defaultValue}`);
 
   if (field.notNull || field.pk) parts.push("NOT NULL");
   if (field.unique && !field.pk) parts.push("UNIQUE");
@@ -124,6 +153,11 @@ function buildCreateTable(node: CustomNode, dialect: SqlDialect): string | null 
     lines.push(`  PRIMARY KEY (${pkColumns})`);
   }
 
+  getChecks(node).forEach((check, index) => {
+    const name = check.name?.trim() || defaultCheckName(getTableName(node), index);
+    lines.push(`  CONSTRAINT ${quote(name, dialect)} CHECK (${check.expression.trim()})`);
+  });
+
   return `CREATE TABLE ${quote(getTableName(node), dialect)} (\n${lines.join(",\n")}\n);`;
 }
 
@@ -133,7 +167,23 @@ type ForeignKey = {
   column: string;
   refTable: string;
   refColumn: string;
+  onDelete?: FkAction | null;
+  onUpdate?: FkAction | null;
 };
+
+export function defaultCheckName(table: string, index: number): string {
+  return sanitizeIdentifier(`chk_${table}_${index + 1}`, "chk");
+}
+
+function getChecks(node: CustomNode): TableCheck[] {
+  const checks = ((node.data as { checks?: TableCheck[] })?.checks || []) as TableCheck[];
+  return checks.filter((check) => check.expression?.trim());
+}
+
+const actionsOf = (edge?: CustomEdge) => ({
+  onDelete: edge?.data?.onDelete ?? null,
+  onUpdate: edge?.data?.onUpdate ?? null,
+});
 
 function resolveForeignKeys(
   entityNodes: CustomNode[],
@@ -170,6 +220,10 @@ function resolveForeignKeys(
       if (!sourceField) sourceField = fkFields[0];
       if (!targetField) targetField = fkFields.find((f) => f !== sourceField);
 
+      const junctionEdges = edges.filter((e) => e.data?.junctionId === data.junctionId);
+      const sourceEdge = junctionEdges.find((e) => e.target === junctionNode.id);
+      const targetEdge = junctionEdges.find((e) => e.source === junctionNode.id);
+
       if (sourceField) {
         foreignKeys.push({
           tableNodeId: junctionNode.id,
@@ -177,6 +231,7 @@ function resolveForeignKeys(
           column: sourceField.name as string,
           refTable: getTableName(sourceNode),
           refColumn: findPkColumn(sourceNode),
+          ...actionsOf(sourceEdge),
         });
       }
 
@@ -187,6 +242,7 @@ function resolveForeignKeys(
           column: targetField.name as string,
           refTable: getTableName(targetNode),
           refColumn: findPkColumn(targetNode),
+          ...actionsOf(targetEdge),
         });
       }
     } else if (data.fkFieldName) {
@@ -200,6 +256,7 @@ function resolveForeignKeys(
         column: data.fkFieldName,
         refTable: getTableName(sourceNode),
         refColumn: findPkColumn(sourceNode),
+        ...actionsOf(edge),
       });
     }
   }
@@ -267,7 +324,10 @@ function buildFkStatement(fk: ForeignKey, dialect: SqlDialect): string {
     `ALTER TABLE ${quote(fk.table, dialect)} ` +
     `ADD CONSTRAINT ${quote(constraintName, dialect)} ` +
     `FOREIGN KEY (${quote(fk.column, dialect)}) ` +
-    `REFERENCES ${quote(fk.refTable, dialect)}(${quote(fk.refColumn, dialect)});`
+    `REFERENCES ${quote(fk.refTable, dialect)}(${quote(fk.refColumn, dialect)})` +
+    (fk.onDelete ? ` ON DELETE ${fk.onDelete}` : "") +
+    (fk.onUpdate ? ` ON UPDATE ${fk.onUpdate}` : "") +
+    ";"
   );
 }
 

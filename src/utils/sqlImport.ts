@@ -1,6 +1,7 @@
-import type { CustomEdge, CustomNode, Field, TableIndex } from "../types/diagramER";
+import type { CustomEdge, CustomNode, Field, FkAction, TableCheck, TableIndex } from "../types/diagramER";
 import { Cursor, splitTopLevel, tokenize, type Token } from "./sqlTokenizer";
-import { defaultIndexName } from "./sqlExport";
+import { defaultCheckName, defaultIndexName } from "./sqlExport";
+import { isSizedType, isValidSize } from "./sqlTypes";
 import { analyzeViewSql } from "./viewSql";
 
 export class SqlImportError extends Error {}
@@ -110,6 +111,13 @@ type ColumnDef = {
   notNull: boolean;
   unique: boolean;
   ai: boolean;
+  size: string | null;
+  defaultValue: string | null;
+};
+
+type CheckDef = {
+  name: string | null;
+  expression: string;
 };
 
 type IndexDef = {
@@ -123,6 +131,7 @@ type TableDef = {
   columns: ColumnDef[];
   primaryKey: string[];
   indexes: IndexDef[];
+  checks: CheckDef[];
 };
 
 type ViewDef = {
@@ -134,7 +143,32 @@ type ForeignKeyDef = {
   table: string;
   columns: string[];
   refTable: string;
+  onDelete?: FkAction | null;
+  onUpdate?: FkAction | null;
 };
+
+const DEFAULT_STOP_WORDS = new Set([
+  "NOT", "NULL", "PRIMARY", "UNIQUE", "REFERENCES", "CHECK", "CONSTRAINT", "AUTO_INCREMENT",
+  "AUTOINCREMENT", "ON", "COMMENT", "COLLATE", "GENERATED", "IDENTITY", "KEY", "VISIBLE",
+  "INVISIBLE", "STORED", "VIRTUAL",
+]);
+
+const LITERAL = /^('(?:[^']|'')*'|-?\d+(?:\.\d+)?|\(-?\d+(?:\.\d+)?\)|NULL|TRUE|FALSE)$/i;
+const TRAILING_CAST = /^(.*?)\s*::\s*[a-z_][a-z0-9_ ]*(?:\(\s*\d+(?:\s*,\s*\d+)?\s*\))?(?:\[\])?$/is;
+
+function normalizeDefault(text: string): { value: string | null; ai: boolean } {
+  let value = text.trim();
+  if (/^nextval\s*\(/i.test(value)) return { value: null, ai: true };
+
+  let match = TRAILING_CAST.exec(value);
+  while (match && LITERAL.test(match[1].trim())) {
+    value = match[1].trim();
+    match = TRAILING_CAST.exec(value);
+  }
+  if (/^\(-?\d+(?:\.\d+)?\)$/.test(value)) value = value.slice(1, -1);
+  if (/^NULL$/i.test(value)) return { value: null, ai: false };
+  return { value: value || null, ai: false };
+}
 
 const COLUMN_STOP_WORDS = new Set([
   "NOT", "NULL", "PRIMARY", "UNIQUE", "DEFAULT", "AUTO_INCREMENT", "AUTOINCREMENT",
@@ -153,6 +187,11 @@ class SchemaBuilder {
   private foreignKeys: ForeignKeyDef[] = [];
   private views = new Map<string, ViewDef>();
   readonly warnings: string[] = [];
+  private readonly source: string;
+
+  constructor(source: string) {
+    this.source = source;
+  }
 
   getTable(name: string): TableDef | undefined {
     return this.tables.get(name.toLowerCase());
@@ -175,7 +214,8 @@ class SchemaBuilder {
     return [...this.views.values()];
   }
 
-  handleStatement(tokens: Token[], sql: string) {
+  handleStatement(tokens: Token[]) {
+    const sql = this.source;
     const cur = new Cursor(tokens);
 
     if (cur.acceptWords("CREATE")) {
@@ -268,7 +308,7 @@ class SchemaBuilder {
       return;
     }
 
-    const table: TableDef = { name, columns: [], primaryKey: [], indexes: [] };
+    const table: TableDef = { name, columns: [], primaryKey: [], indexes: [], checks: [] };
     const pendingFks: ForeignKeyDef[] = [];
 
     for (const item of splitTopLevel(cur.skipGroup())) {
@@ -335,6 +375,8 @@ class SchemaBuilder {
         if (existing) {
           existing.name = column.name;
           existing.type = column.type ?? existing.type;
+          existing.size = column.size;
+          existing.defaultValue = column.defaultValue ?? existing.defaultValue;
           existing.notNull ||= column.notNull;
           existing.unique ||= column.unique;
           existing.ai ||= column.ai;
@@ -348,9 +390,19 @@ class SchemaBuilder {
         const columnName = ac.readName();
         const column = columnName ? this.getColumn(table, columnName) : undefined;
         if (!column) continue;
-        const words = action.filter((t) => t.kind === "word").map((t) => t.value.toUpperCase());
-        if (words.includes("NEXTVAL") || words.includes("IDENTITY")) column.ai = true;
-        if (ac.acceptWords("SET", "NOT", "NULL")) column.notNull = true;
+        if (ac.acceptWords("SET", "DEFAULT")) {
+          const parsed = this.readDefault(ac);
+          if (parsed.ai) column.ai = true;
+          else column.defaultValue = parsed.value;
+        } else if (ac.acceptWords("DROP", "DEFAULT")) {
+          column.defaultValue = null;
+        } else if (ac.acceptWords("SET", "NOT", "NULL")) {
+          column.notNull = true;
+        } else if (ac.acceptWords("DROP", "NOT", "NULL")) {
+          column.notNull = false;
+        } else if (action.some((t) => t.kind === "word" && t.value.toUpperCase() === "IDENTITY")) {
+          column.ai = true;
+        }
       }
     }
 
@@ -385,11 +437,13 @@ class SchemaBuilder {
 
     const typeWords: string[] = [];
     let isArray = false;
+    let rawSize: string | null = null;
     while (!cur.done) {
       const token = cur.peek()!;
       if (token.kind === "punct") {
         if (token.value === "(") {
-          cur.skipGroup();
+          const inner = cur.skipGroup();
+          if (rawSize === null && typeWords.length) rawSize = inner.map((t) => t.value).join("");
           continue;
         }
         if (token.value === "[") {
@@ -418,14 +472,25 @@ class SchemaBuilder {
       notNull: false,
       unique: false,
       ai: serial,
+      size: rawSize && isSizedType(type) && isValidSize(type, rawSize) ? rawSize : null,
+      defaultValue: null,
     };
 
+    let constraintName: string | null = null;
     while (!cur.done) {
       if (cur.isPunct("(")) {
         cur.skipGroup();
         continue;
       }
-      if (cur.acceptWords("NOT", "NULL")) column.notNull = true;
+      if (cur.acceptWords("CONSTRAINT")) {
+        constraintName = cur.readName();
+        continue;
+      }
+      if (cur.acceptWords("CHECK")) {
+        const expression = this.readGroupText(cur);
+        if (expression) table.checks.push({ name: constraintName, expression });
+        constraintName = null;
+      } else if (cur.acceptWords("NOT", "NULL")) column.notNull = true;
       else if (cur.acceptWords("PRIMARY", "KEY")) column.pk = true;
       else if (cur.acceptWords("UNIQUE")) {
         column.unique = true;
@@ -437,10 +502,13 @@ class SchemaBuilder {
       ) {
         column.ai = true;
       } else if (cur.acceptWords("DEFAULT")) {
-        if (cur.isWord("NEXTVAL")) column.ai = true;
+        const parsed = this.readDefault(cur);
+        if (parsed.ai) column.ai = true;
+        else column.defaultValue = parsed.value;
       } else if (cur.acceptWords("REFERENCES")) {
         const refTable = cur.readName();
-        if (refTable) fks.push({ table: table.name, columns: [column.name], refTable });
+        const actions = this.readReferenceTail(cur);
+        if (refTable) fks.push({ table: table.name, columns: [column.name], refTable, ...actions });
       } else {
         cur.next();
       }
@@ -499,8 +567,74 @@ class SchemaBuilder {
       const columns = cur.readNameList();
       if (!cur.acceptWords("REFERENCES")) return;
       const refTable = cur.readName();
-      if (columns.length && refTable) fks.push({ table: table.name, columns, refTable });
+      const actions = this.readReferenceTail(cur);
+      if (columns.length && refTable) fks.push({ table: table.name, columns, refTable, ...actions });
+      return;
     }
+
+    if (cur.acceptWords("CHECK")) {
+      const expression = this.readGroupText(cur);
+      if (expression) table.checks.push({ name: constraintName, expression });
+    }
+  }
+
+  private readGroupText(cur: Cursor): string | null {
+    if (!cur.isPunct("(")) return null;
+    const inner = cur.skipGroup();
+    if (!inner.length) return null;
+    return this.source.slice(inner[0].start, inner[inner.length - 1].end).trim();
+  }
+
+  private readDefault(cur: Cursor): { value: string | null; ai: boolean } {
+    const first = cur.peek();
+    if (!first) return { value: null, ai: false };
+
+    let last = first;
+    let consumed = 0;
+    while (!cur.done) {
+      const token = cur.peek()!;
+      if (consumed > 0 && token.kind === "word" && DEFAULT_STOP_WORDS.has(token.value.toUpperCase())) break;
+      if (token.kind === "punct" && token.value === "(") {
+        cur.skipGroup();
+        last = cur.tokens[cur.pos - 1];
+      } else {
+        cur.next();
+        last = token;
+      }
+      consumed++;
+    }
+
+    return normalizeDefault(this.source.slice(first.start, last.end));
+  }
+
+  private readAction(cur: Cursor): FkAction | null {
+    if (cur.acceptWords("CASCADE")) return "CASCADE";
+    if (cur.acceptWords("RESTRICT")) return "RESTRICT";
+    if (cur.acceptWords("SET", "NULL")) return "SET NULL";
+    if (cur.acceptWords("SET", "DEFAULT")) return "SET DEFAULT";
+    cur.acceptWords("NO", "ACTION");
+    return null;
+  }
+
+  private readReferenceTail(cur: Cursor): { onDelete: FkAction | null; onUpdate: FkAction | null } {
+    const actions: { onDelete: FkAction | null; onUpdate: FkAction | null } = { onDelete: null, onUpdate: null };
+    if (cur.isPunct("(")) cur.skipGroup();
+
+    while (!cur.done) {
+      if (cur.acceptWords("ON", "DELETE")) actions.onDelete = this.readAction(cur);
+      else if (cur.acceptWords("ON", "UPDATE")) actions.onUpdate = this.readAction(cur);
+      else if (cur.acceptWords("MATCH")) cur.next();
+      else if (
+        cur.acceptWords("NOT", "DEFERRABLE") ||
+        cur.acceptWords("DEFERRABLE") ||
+        cur.acceptWords("INITIALLY", "DEFERRED") ||
+        cur.acceptWords("INITIALLY", "IMMEDIATE")
+      ) {
+        continue;
+      } else break;
+    }
+
+    return actions;
   }
 
   private syncPrimaryKey(table: TableDef) {
@@ -515,6 +649,11 @@ class SchemaBuilder {
 }
 
 const newId = () => globalThis.crypto.randomUUID();
+
+const presentActions = (fk: ForeignKeyDef) => ({
+  ...(fk.onDelete ? { onDelete: fk.onDelete } : {}),
+  ...(fk.onUpdate ? { onUpdate: fk.onUpdate } : {}),
+});
 
 const NODE_WIDTH = 300;
 const COLUMN_GAP = 140;
@@ -577,11 +716,11 @@ function layoutItems(
 }
 
 export function parseSqlToDiagram(sql: string): SqlImportResult {
-  const builder = new SchemaBuilder();
+  const builder = new SchemaBuilder(sql);
 
   for (const statement of tokenize(sql)) {
     try {
-      builder.handleStatement(statement, sql);
+      builder.handleStatement(statement);
     } catch {
       const preview = statement.slice(0, 6).map((t) => t.value).join(" ");
       builder.warnings.push(`Não foi possível interpretar o comando "${preview}...".`);
@@ -686,6 +825,8 @@ export function parseSqlToDiagram(sql: string): SqlImportResult {
       notNull: column.notNull || column.pk,
       unique: column.unique,
       ai: column.ai,
+      ...(column.size ? { size: column.size } : {}),
+      ...(column.defaultValue ? { defaultValue: column.defaultValue } : {}),
       order: index,
     }));
 
@@ -713,11 +854,22 @@ export function parseSqlToDiagram(sql: string): SqlImportResult {
     }
     indexCount += indexes.length;
 
+    const checks: TableCheck[] = table.checks.map((check, index) => ({
+      id: newId(),
+      name: check.name ?? defaultCheckName(table.name, index),
+      expression: check.expression,
+    }));
+
     return {
       id,
       type: "entityNode",
       position: positions.get(tableKey(table.name)) ?? { x: 0, y: 0 },
-      data: indexes.length ? { name: table.name, fields, indexes } : { name: table.name, fields },
+      data: {
+        name: table.name,
+        fields,
+        ...(indexes.length ? { indexes } : {}),
+        ...(checks.length ? { checks } : {}),
+      },
     } as CustomNode;
   });
 
@@ -748,8 +900,22 @@ export function parseSqlToDiagram(sql: string): SqlImportResult {
     const data = { relationType: "1:N" as const, sourceNodeId, targetNodeId, junctionId };
 
     edges.push(
-      { id: newId(), source: sourceNodeId, target: junctionId, label: "1:N", type: "floating", data },
-      { id: newId(), source: junctionId, target: targetNodeId, label: "1:N", type: "floating", data },
+      {
+        id: newId(),
+        source: sourceNodeId,
+        target: junctionId,
+        label: "1:N",
+        type: "floating",
+        data: { ...data, ...presentActions(first) },
+      },
+      {
+        id: newId(),
+        source: junctionId,
+        target: targetNodeId,
+        label: "1:N",
+        type: "floating",
+        data: { ...data, ...presentActions(second) },
+      },
     );
     relationCount++;
   }
@@ -777,7 +943,7 @@ export function parseSqlToDiagram(sql: string): SqlImportResult {
       target: targetNodeId,
       label: relationType,
       type: "floating",
-      data: { relationType, sourceNodeId, targetNodeId, fkFieldName },
+      data: { relationType, sourceNodeId, targetNodeId, fkFieldName, ...presentActions(fk) },
     });
     relationCount++;
   }

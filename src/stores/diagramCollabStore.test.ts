@@ -307,6 +307,44 @@ describe("diagramCollabStore", () => {
     });
   });
 
+  describe("propriedades de aresta (SET_EDGE_PROP)", () => {
+    const edgeData = () => r.state().getEdge("e1")?.data;
+
+    beforeEach(() => {
+      r.load([entity("cliente"), entity("pedido")], [edge("e1", "cliente", "pedido")]);
+    });
+
+    it("LWW: a escrita com lamport maior vence, independente da ordem de chegada", () => {
+      r.receive(remoteOp({ type: "SET_EDGE_PROP", targetId: "e1", lamport: 5, payload: { key: "onDelete", value: "CASCADE" } }));
+      r.receive(remoteOp({ type: "SET_EDGE_PROP", targetId: "e1", lamport: 3, payload: { key: "onDelete", value: "SET NULL" } }));
+
+      expect(edgeData()?.onDelete).toBe("CASCADE");
+    });
+
+    it("chega antes do ADD_EDGE e é aplicada quando a aresta chega", () => {
+      r.receive(remoteOp({ type: "SET_EDGE_PROP", targetId: "e2", lamport: 4, payload: { key: "onUpdate", value: "CASCADE" } }));
+      r.receive(remoteOp({ type: "ADD_EDGE", targetId: "e2", lamport: 2, payload: edge("e2", "pedido", "cliente") }));
+
+      expect(r.state().getEdge("e2")?.data?.onUpdate).toBe("CASCADE");
+    });
+
+    it("desfazer volta ao valor anterior e refazer reaplica", () => {
+      r.local({ type: "SET_EDGE_PROP", targetId: "e1", payload: { key: "onDelete", value: "CASCADE" }, previousValue: undefined });
+      expect(edgeData()?.onDelete).toBe("CASCADE");
+
+      r.undo();
+      expect(edgeData()?.onDelete).toBeUndefined();
+
+      r.redo();
+      expect(edgeData()?.onDelete).toBe("CASCADE");
+    });
+
+    it("não permite apagar a aresta por SET_EDGE_PROP", () => {
+      r.receive(remoteOp({ type: "SET_EDGE_PROP", targetId: "e1", lamport: 9, payload: { key: "deleted", value: true } }));
+      expect(edgeData()?.deleted).toBeFalsy();
+    });
+  });
+
   describe("estado inicial", () => {
     it("resetDocument zera documento, histórico e relógio", () => {
       r.local({ type: "MOVE_NODE", targetId: "cliente", payload: { x: 1, y: 1 } });

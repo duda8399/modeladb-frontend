@@ -15,11 +15,15 @@ export interface Field {
   notNull: boolean;
   unique: boolean;
   ai: boolean;
+  size?: string | null;
+  defaultValue?: string | null;
 }
 
 export interface CustomNode extends Node {
   fields?: Field[];
 }
+
+export type FkAction = "RESTRICT" | "CASCADE" | "SET NULL" | "SET DEFAULT" | "NO ACTION";
 
 export type CustomEdge = Edge & {
   data?: {
@@ -28,6 +32,8 @@ export type CustomEdge = Edge & {
     targetNodeId?: string;
     junctionId?: string;
     fkFieldName?: string;
+    onDelete?: FkAction | null;
+    onUpdate?: FkAction | null;
   };
 };
 
@@ -41,4 +47,10 @@ export interface TableIndex {
 export interface ViewNodeData {
   name: string;
   sql: string;
+}
+
+export interface TableCheck {
+  id: string;
+  name: string;
+  expression: string;
 }

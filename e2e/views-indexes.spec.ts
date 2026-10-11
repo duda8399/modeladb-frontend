@@ -58,8 +58,8 @@ test("importa, edita e exporta índices e views", async ({ browser }) => {
   await expect(cliente.getByTestId("entity-indexes")).toContainText("uq_email (email)");
   await expect(viewNodes(page).first()).toContainText("Fonte: cliente, pedido");
 
-  await cliente.getByRole("button", { name: "Índices" }).click();
-  const modal = page.locator(".ant-modal").filter({ hasText: "Índices de cliente" });
+  await cliente.getByRole("button", { name: "Restrições" }).click();
+  const modal = page.locator(".ant-modal").filter({ hasText: "Índices e restrições de cliente" });
   await modal.getByRole("button", { name: "Adicionar índice" }).click();
   const newRow = modal.getByTestId("index-row").nth(2);
   await newRow.locator(".ant-select").click();

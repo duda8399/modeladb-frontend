@@ -7,6 +7,7 @@ import {
   type EdgeProps,
 } from "reactflow";
 import { Tooltip } from "antd";
+import { EditOutlined } from "@ant-design/icons";
 import { getEdgeParams } from "./floatingEdgeUtils";
 import { useEdgeActions } from "./EdgeActionsContext";
 import trash from "../../assets/trash.svg";
@@ -27,8 +28,9 @@ export default function FloatingEdge({
   style,
   label,
   selected,
+  data,
 }: EdgeProps) {
-  const { onRemove, readOnly } = useEdgeActions();
+  const { onRemove, onEdit, readOnly } = useEdgeActions();
   const [hovered, setHovered] = useState(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -76,6 +78,21 @@ export default function FloatingEdge({
   const active = hovered || selected;
   const showTrash = active && !readOnly;
 
+  const fkField =
+    data?.fkFieldName && !data?.junctionId
+      ? ((targetNode.data?.fields ?? []) as { name: string | null; notNull: boolean; pk: boolean }[]).find(
+          (field) => field.name === data.fkFieldName,
+        )
+      : undefined;
+  const optional = !!fkField && !fkField.notNull && !fkField.pk;
+  const summary = [
+    optional ? "Participação opcional" : "Participação obrigatória",
+    data?.onDelete && `ON DELETE ${data.onDelete}`,
+    data?.onUpdate && `ON UPDATE ${data.onUpdate}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <>
       <g onMouseEnter={show} onMouseLeave={scheduleHide}>
@@ -86,6 +103,7 @@ export default function FloatingEdge({
           style={{
             ...style,
             stroke: active ? "#2e7d32" : style?.stroke,
+            strokeDasharray: optional ? "6 4" : undefined,
           }}
           interactionWidth={24}
         />
@@ -108,7 +126,14 @@ export default function FloatingEdge({
           >
             {label && (
               <div
+                title={summary}
+                data-testid="edge-label"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(id);
+                }}
                 style={{
+                  cursor: "pointer",
                   background: "#ffffff",
                   border: `1px solid ${active ? "#2e7d32" : "#e0e0e0"}`,
                   borderRadius: 4,
@@ -120,6 +145,34 @@ export default function FloatingEdge({
               >
                 {label}
               </div>
+            )}
+            {showTrash && (
+              <Tooltip title="Editar relacionamento" placement="top">
+                <button
+                  type="button"
+                  aria-label="Editar relacionamento"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit(id);
+                  }}
+                  style={{
+                    width: 24,
+                    height: 24,
+                    padding: 0,
+                    border: "none",
+                    borderRadius: "50%",
+                    backgroundColor: "#2e7d32",
+                    color: "#ffffff",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <EditOutlined style={{ fontSize: 12 }} />
+                </button>
+              </Tooltip>
             )}
             {showTrash && (
               <Tooltip title="Remover conexão" placement="top">

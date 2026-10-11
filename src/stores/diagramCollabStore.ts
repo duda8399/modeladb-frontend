@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { XYPosition } from "reactflow";
-import type { CustomNode, CustomEdge, Field } from "../types/diagramER";
+import type { CustomNode, CustomEdge, Field, FkAction } from "../types/diagramER";
 
 export type CrdtMeta = { lamport: number; userId: string };
 
@@ -26,6 +26,8 @@ export interface CollabEdgeData {
   targetNodeId?: string;
   junctionId?: string;
   fkFieldName?: string;
+  onDelete?: FkAction | null;
+  onUpdate?: FkAction | null;
   deleted?: boolean;
   _crdt?: Record<string, CrdtMeta>;
 }
@@ -45,6 +47,7 @@ export type OperationType =
   | "SET_FIELD_PROP"
   | "SET_FIELD_ORDER"
   | "ADD_EDGE"
+  | "SET_EDGE_PROP"
   | "DELETE_EDGE"
   | "RESTORE_EDGE";
 
@@ -457,6 +460,11 @@ function executeAddEdge(get: Get, set: Set, op: Operation) {
   processPendingOperations(get, set, edge.id);
 }
 
+function executeSetEdgeProp(get: Get, set: Set, op: Operation) {
+  if (!op.payload?.key || op.payload.key === "deleted") return;
+  applyEdgeMutation(get, set, op, op.payload.key, op.payload.value);
+}
+
 function executeDeleteEdge(get: Get, set: Set, op: Operation) {
   applyEdgeMutation(get, set, op, "deleted", true);
 }
@@ -479,6 +487,7 @@ function execute(get: Get, set: Set, op: Operation) {
     case "SET_FIELD_PROP": return executeSetFieldProp(get, set, op);
     case "SET_FIELD_ORDER": return executeSetFieldOrder(get, set, op);
     case "ADD_EDGE": return executeAddEdge(get, set, op);
+    case "SET_EDGE_PROP": return executeSetEdgeProp(get, set, op);
     case "DELETE_EDGE": return executeDeleteEdge(get, set, op);
     case "RESTORE_EDGE": return executeRestoreEdge(get, set, op);
   }
@@ -510,6 +519,14 @@ function getInverseOperation(op: Operation): OperationDraft | null {
         targetId: op.targetId,
         payload: op.previousPosition,
         previousPosition: op.payload,
+      };
+
+    case "SET_EDGE_PROP":
+      return {
+        type: "SET_EDGE_PROP",
+        targetId: op.targetId,
+        payload: { key: op.payload?.key, value: op.previousValue },
+        previousValue: op.payload?.value,
       };
 
     case "SET_NODE_PROP":

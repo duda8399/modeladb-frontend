@@ -38,12 +38,17 @@ import { EdgeActionsContext } from "../../components/ConstructorComponents/EdgeA
 import FloatingEdge from "../../components/ConstructorComponents/FloatingEdge";
 import ViewNode from "../../components/ConstructorComponents/ViewNode";
 import ViewEdge from "../../components/ConstructorComponents/ViewEdge";
+import RelationshipModal, {
+  type RelationshipChanges,
+  type RelationshipDetails,
+} from "../../components/ConstructorComponents/RelationshipModal";
 import { analyzeViewSql } from "../../utils/viewSql";
 import { normalizeSqlName } from "../../utils/identifiers";
 import type {
   CustomEdge,
   CustomNode,
   Field,
+  TableCheck,
   TableIndex,
   ViewNodeData,
 } from "../../types/diagramER";
@@ -104,6 +109,7 @@ const ConstructorPage: React.FC = () => {
     "OWNER" | "EDITOR" | "VIEWER" | null
   >(null);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null);
   const reactFlowContainerRef = useRef<HTMLDivElement>(null);
   const dragStartPositionsRef = useRef<Record<string, { x: number; y: number }>>(
     {},
@@ -358,6 +364,7 @@ const ConstructorPage: React.FC = () => {
         onRename={(value: string) => setNodeProp(props.id, "name", value)}
         onFieldsChange={(fields: Field[]) => onFieldsChange(props.id, fields)}
         onIndexesChange={(indexes: TableIndex[]) => setNodeProp(props.id, "indexes", indexes)}
+        onChecksChange={(checks: TableCheck[]) => setNodeProp(props.id, "checks", checks)}
       />
     ),
     [deleteNodeWithCascade, setNodeProp, onFieldsChange],
@@ -463,8 +470,80 @@ const ConstructorPage: React.FC = () => {
 
   const renderedEdges = useMemo(() => [...edges, ...viewEdges], [edges, viewEdges]);
   const edgeActions = useMemo(
-    () => ({ onRemove: deleteEdgeWithCascade, readOnly: isViewer }),
+    () => ({ onRemove: deleteEdgeWithCascade, onEdit: setEditingEdgeId, readOnly: isViewer }),
     [deleteEdgeWithCascade, isViewer],
+  );
+
+  const findFkField = useCallback((edge: CollabEdge) => {
+    const state = useDiagramCollabStore.getState();
+    const data = edge.data;
+    if (!data) return { childNode: undefined, parentNode: undefined, fkField: undefined };
+
+    if (data.junctionId) {
+      const junction = state.getNode(data.junctionId);
+      const parentId = edge.target === data.junctionId ? edge.source : edge.target;
+      const parentNode = state.getNode(parentId);
+      const expected = `fk_${parentNode?.data.name ?? ""}_id`.toLowerCase();
+      const fkField = (junction?.data.fields ?? []).find(
+        (f) => !f.deleted && f.fk && f.name?.toLowerCase() === expected,
+      );
+      return { childNode: junction, parentNode, fkField };
+    }
+
+    const childNode = state.getNode(data.targetNodeId ?? edge.target);
+    const parentNode = state.getNode(data.sourceNodeId ?? edge.source);
+    const fkField = (childNode?.data.fields ?? []).find(
+      (f) => !f.deleted && f.name === data.fkFieldName,
+    );
+    return { childNode, parentNode, fkField };
+  }, []);
+
+  const editingDetails = useMemo<RelationshipDetails | null>(() => {
+    if (!editingEdgeId) return null;
+    const edge = useDiagramCollabStore.getState().getEdge(editingEdgeId);
+    if (!edge?.data) return null;
+
+    const { childNode, parentNode, fkField } = findFkField(edge);
+    return {
+      relationType: edge.data.relationType ?? "1:N",
+      parentTable: parentNode?.data.name ?? "?",
+      childTable: childNode?.data.name ?? "?",
+      fkColumn: fkField?.name ?? edge.data.fkFieldName ?? null,
+      isJunction: !!edge.data.junctionId,
+      canChangeParticipation: !edge.data.junctionId && !!fkField && !fkField.pk,
+      required: edge.data.junctionId ? true : !!fkField && (fkField.notNull || fkField.pk),
+      onDelete: edge.data.onDelete ?? null,
+      onUpdate: edge.data.onUpdate ?? null,
+    };
+  }, [editingEdgeId, findFkField]);
+
+  const saveRelationship = useCallback(
+    (edgeId: string, changes: RelationshipChanges) => {
+      const edge = useDiagramCollabStore.getState().getEdge(edgeId);
+      if (!edge?.data) return;
+
+      (["onDelete", "onUpdate"] as const).forEach((key) => {
+        const previousValue = edge.data?.[key] ?? null;
+        if (previousValue === changes[key]) return;
+        sendOp({
+          type: "SET_EDGE_PROP",
+          targetId: edgeId,
+          payload: { key, value: changes[key] },
+          previousValue,
+        });
+      });
+
+      const { childNode, fkField } = findFkField(edge);
+      if (!edge.data.junctionId && childNode && fkField && !fkField.pk && fkField.notNull !== changes.required) {
+        sendOp({
+          type: "SET_FIELD_PROP",
+          targetId: childNode.id,
+          payload: { fieldId: fkField.id, key: "notNull", value: changes.required },
+          previousValue: fkField.notNull,
+        });
+      }
+    },
+    [findFkField, sendOp],
   );
 
   const handleUndo = useCallback(() => {
@@ -1203,6 +1282,16 @@ const ConstructorPage: React.FC = () => {
         onCancel={() => setOpenRelationModal(false)}
         onSelect={onSelectRelationType}
       />
+
+      {editingEdgeId && editingDetails && (
+        <RelationshipModal
+          key={editingEdgeId}
+          details={editingDetails}
+          readOnly={isViewer}
+          onClose={() => setEditingEdgeId(null)}
+          onSave={(changes) => saveRelationship(editingEdgeId, changes)}
+        />
+      )}
 
       {id && (
         <ShareModal

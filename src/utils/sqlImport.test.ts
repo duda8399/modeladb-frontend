@@ -2,8 +2,9 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { parseSqlToDiagram, SqlImportError } from "./sqlImport";
 import { generateSqlBlocks, type SqlDialect } from "./sqlExport";
+import { isValidSize } from "./sqlTypes";
 import { ALL_UI_TYPES, diagramArb } from "../test/erArbitraries";
-import type { CustomNode, Field, TableIndex } from "../types/diagramER";
+import type { CustomNode, Field, FkAction, TableCheck, TableIndex } from "../types/diagramER";
 
 const tableByName = (nodes: CustomNode[], name: string) => {
   const node = nodes.find((n) => (n.data as { name: string }).name === name);
@@ -82,7 +83,13 @@ describe("MySQL", () => {
         target: pedido.id,
         label: "1:N",
         type: "floating",
-        data: { relationType: "1:N", sourceNodeId: cliente.id, targetNodeId: pedido.id, fkFieldName: "cliente_id" },
+        data: {
+          relationType: "1:N",
+          sourceNodeId: cliente.id,
+          targetNodeId: pedido.id,
+          fkFieldName: "cliente_id",
+          onDelete: "CASCADE",
+        },
       },
     ]);
     expect(field(nodes, "pedido", "cliente_id").fk).toBe(true);
@@ -311,6 +318,94 @@ describe("entradas inválidas", () => {
   });
 });
 
+const checksOf = (node: CustomNode) =>
+  ((node.data as { checks?: TableCheck[] }).checks ?? []).map(({ name, expression }) => ({ name, expression }));
+
+describe("tamanho, DEFAULT, CHECK e ações de FK", () => {
+  it("lê tamanho e precisão só dos tipos que aceitam", () => {
+    const { nodes } = parseSqlToDiagram(`
+      CREATE TABLE t (
+        a VARCHAR(120), b CHAR(2), c DECIMAL(12, 2), d character varying(40),
+        e numeric(8), f timestamp(3) with time zone, g INT(11), h BIT(8), i VARCHAR(MAX)
+      );
+    `);
+    const sizes = Object.fromEntries(fieldsOf(tableByName(nodes, "t")).map((f) => [f.name, f.size ?? null]));
+    expect(sizes).toEqual({ a: "120", b: "2", c: "12,2", d: "40", e: "8", f: "3", g: null, h: "8", i: null });
+  });
+
+  it("lê DEFAULT de MySQL e PostgreSQL, sem os casts do pg_dump", () => {
+    const { nodes } = parseSqlToDiagram(`
+      CREATE TABLE t (
+        id integer NOT NULL,
+        status character varying(20) DEFAULT 'ativo'::character varying NOT NULL,
+        saldo numeric(10,2) DEFAULT (0)::numeric,
+        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        expira DATE DEFAULT (now() + interval '30 days'),
+        nivel INT DEFAULT -1,
+        obs TEXT DEFAULT NULL,
+        nome VARCHAR(10) DEFAULT 'a;b' COMMENT 'nome'
+      );
+      ALTER TABLE ONLY t ALTER COLUMN id SET DEFAULT nextval('t_id_seq'::regclass);
+    `);
+    const defaults = Object.fromEntries(fieldsOf(tableByName(nodes, "t")).map((f) => [f.name, f.defaultValue ?? null]));
+    expect(defaults).toEqual({
+      id: null,
+      status: "'ativo'",
+      saldo: "0",
+      criado_em: "CURRENT_TIMESTAMP",
+      expira: "(now() + interval '30 days')",
+      nivel: "-1",
+      obs: null,
+      nome: "'a;b'",
+    });
+    expect(field(nodes, "t", "id").ai).toBe(true);
+    expect(field(nodes, "t", "status").notNull).toBe(true);
+  });
+
+  it("CHECK de coluna e de tabela, com e sem nome, inclusive por ALTER TABLE", () => {
+    const { nodes } = parseSqlToDiagram(`
+      CREATE TABLE produto (
+        preco DECIMAL CHECK (preco >= 0),
+        estoque INT CONSTRAINT chk_estoque CHECK (estoque >= 0),
+        inicio DATE, fim DATE,
+        CHECK (fim > inicio),
+        CONSTRAINT produto_preco_check CHECK ((preco < (1000)::numeric))
+      );
+      ALTER TABLE produto ADD CONSTRAINT chk_datas CHECK (fim <> inicio);
+    `);
+    expect(checksOf(tableByName(nodes, "produto"))).toEqual([
+      { name: "chk_produto_1", expression: "preco >= 0" },
+      { name: "chk_estoque", expression: "estoque >= 0" },
+      { name: "chk_produto_3", expression: "fim > inicio" },
+      { name: "produto_preco_check", expression: "(preco < (1000)::numeric)" },
+      { name: "chk_datas", expression: "fim <> inicio" },
+    ]);
+  });
+
+  it("ON DELETE / ON UPDATE nas FKs, inclusive nas da tabela associativa", () => {
+    const { edges } = parseSqlToDiagram(`
+      CREATE TABLE a (id INT PRIMARY KEY);
+      CREATE TABLE b (id INT PRIMARY KEY);
+      CREATE TABLE c (
+        id INT PRIMARY KEY,
+        a_id INT REFERENCES a(id) ON UPDATE CASCADE ON DELETE SET NULL,
+        b_id INT REFERENCES b(id) ON DELETE NO ACTION
+      );
+      CREATE TABLE a_b (
+        fk_a_id INT, fk_b_id INT, PRIMARY KEY (fk_a_id, fk_b_id),
+        FOREIGN KEY (fk_a_id) REFERENCES a (id) MATCH SIMPLE ON DELETE CASCADE,
+        FOREIGN KEY (fk_b_id) REFERENCES b (id) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
+      );
+    `);
+    const byFk = (name: string) => edges.find((e) => e.data?.fkFieldName === name)?.data;
+    expect(byFk("a_id")).toMatchObject({ onDelete: "SET NULL", onUpdate: "CASCADE" });
+    expect(byFk("b_id")).not.toHaveProperty("onDelete");
+
+    const junctionEdges = edges.filter((e) => e.data?.junctionId);
+    expect(junctionEdges.map((e) => e.data?.onDelete)).toEqual(["CASCADE", "RESTRICT"]);
+  });
+});
+
 const indexesOf = (node: CustomNode) => (node.data as { indexes?: TableIndex[] }).indexes ?? [];
 
 describe("índices", () => {
@@ -430,9 +525,49 @@ const withIndexesAndViews = (types: string[]) =>
           { maxLength: 4 },
         ),
         withView: fc.boolean(),
+        extras: fc.array(
+          fc.record({
+            size: fc.constantFrom("1", "20", "6", "10,2", "3"),
+            defaultValue: fc.constantFrom(null, "0", "-1", "'a;b'", "CURRENT_TIMESTAMP", "(1 + 2)", "'it''s'"),
+          }),
+          { minLength: 6, maxLength: 6 },
+        ),
+        checks: fc.array(fc.constantFrom("x > 0", "length(nome) > 2", "(a <> b)", "status IN ('a', 'b')"), {
+          maxLength: 2,
+        }),
+        actions: fc.array(
+          fc.record({
+            onDelete: fc.constantFrom<FkAction | null>(null, "CASCADE", "SET NULL", "RESTRICT"),
+            onUpdate: fc.constantFrom<FkAction | null>(null, "CASCADE", "NO ACTION"),
+          }),
+          { minLength: 12, maxLength: 12 },
+        ),
       })
-      .map(({ specs, withView }) => {
+      .map(({ specs, withView, extras, checks, actions }) => {
         const entities = nodes.filter((n) => n.type === "entityNode");
+        entities.forEach((node, t) => {
+          const fields = (node.data as { fields: Field[] }).fields;
+          fields.forEach((f, i) => {
+            const extra = extras[(i + t) % extras.length];
+            if (isValidSize(f.type, extra.size)) f.size = extra.size;
+            if (!f.ai && extra.defaultValue) f.defaultValue = extra.defaultValue;
+          });
+          if (t === 0 && checks.length) {
+            (node.data as { checks?: TableCheck[] }).checks = checks.map((expression, k) => ({
+              id: `c${k}`,
+              name: `chk_${k}`,
+              expression,
+            }));
+          }
+        });
+        edges.forEach((e, k) => {
+          const { onDelete, onUpdate } = actions[k % actions.length];
+          e.data = {
+            ...e.data!,
+            ...(onDelete ? { onDelete } : {}),
+            ...(onUpdate && onUpdate !== "NO ACTION" ? { onUpdate } : {}),
+          };
+        });
         specs.forEach((spec, k) => {
           const node = entities[spec.table % entities.length];
           const fields = (node.data as { fields: Field[] }).fields;
