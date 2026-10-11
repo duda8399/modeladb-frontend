@@ -34,6 +34,7 @@ const nodeStyle = {
 
 interface Props {
   onAddEntity: () => void;
+  onAddView: () => void;
   onAddNote: () => void;
   onAddSection: () => void;
   onAddText: () => void;
@@ -48,6 +49,7 @@ interface Props {
 
 export function SidebarConstructor({
   onAddEntity,
+  onAddView,
   onAddNote,
   onAddSection,
   onAddText,
@@ -314,6 +316,14 @@ export function SidebarConstructor({
           onClick={readOnly ? undefined : onAddEntity}
         >
           Adicionar Entidade
+        </div>
+        <div
+          style={
+            readOnly ? { ...nodeStyle, opacity: 0.5, cursor: "not-allowed" } : nodeStyle
+          }
+          onClick={readOnly ? undefined : onAddView}
+        >
+          Adicionar View
         </div>
       </div>
 

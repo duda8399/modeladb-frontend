@@ -4,6 +4,7 @@ import { generateSqlBlocks, generateSqlScript } from "./sqlExport";
 import { col, lojaDiagram, manyToMany, oneToMany, pk, table } from "../test/erFixtures";
 import { ddlStatements, parseAll, runOnPgMem } from "../test/sqlEngines";
 import { PG_MEM_TYPES, diagramArb } from "../test/erArbitraries";
+import type { CustomNode, Field, TableIndex } from "../types/diagramER";
 
 /**
  * Item 2 — Exportação SQL.
@@ -241,6 +242,74 @@ describe("script completo", () => {
 
   it("usa 'modeladb' como nome padrão do banco", () => {
     expect(generateSqlScript([], [], "mysql").sql).toContain("CREATE DATABASE IF NOT EXISTS `modeladb`;");
+  });
+});
+
+describe("índices e views", () => {
+  const comIndices = () => {
+    const { nodes, edges, ids } = lojaDiagram();
+    const cliente = nodes.find((n) => n.id === ids.cliente)!;
+    const fields = (cliente.data as { fields: Field[] }).fields;
+    const [, nome, email] = fields;
+    (cliente.data as { indexes: TableIndex[] }).indexes = [
+      { id: "i1", name: "idx_nome", columns: [nome.id], unique: false },
+      { id: "i2", name: "", columns: [nome.id, email.id], unique: true },
+      { id: "i3", name: "idx_orfao", columns: ["campo-removido"], unique: false },
+    ];
+    const view = {
+      id: "v1",
+      type: "viewNode",
+      position: { x: 0, y: 0 },
+      data: { name: "clientes ativos", sql: "  SELECT \"nome\" FROM \"cliente\";;  " },
+    } as CustomNode;
+    const vazia = { id: "v2", type: "viewNode", position: { x: 0, y: 0 }, data: { name: "x", sql: " " } } as CustomNode;
+    return { nodes: [...nodes, view, vazia], edges };
+  };
+
+  it("MySQL: CREATE [UNIQUE] INDEX com nome padrão e sem colunas removidas", () => {
+    const { nodes, edges } = comIndices();
+    expect(generateSqlBlocks(nodes, edges, "mysql").indexStatements).toEqual([
+      "CREATE INDEX `idx_nome` ON `cliente` (`nome`);",
+      "CREATE UNIQUE INDEX `idx_cliente_nome_email` ON `cliente` (`nome`, `email`);",
+    ]);
+  });
+
+  it("PostgreSQL: aspas duplas nos índices", () => {
+    const { nodes, edges } = comIndices();
+    expect(generateSqlBlocks(nodes, edges, "postgres").indexStatements[0]).toBe(
+      'CREATE INDEX "idx_nome" ON "cliente" ("nome");',
+    );
+  });
+
+  it("view: CREATE VIEW com nome saneado, sem ; duplicado; views vazias são contadas", () => {
+    const { nodes, edges } = comIndices();
+    const result = generateSqlBlocks(nodes, edges, "postgres");
+    expect(result.viewBlocks.map((b) => b.sql)).toEqual([
+      'CREATE VIEW "clientes_ativos" AS\nSELECT "nome" FROM "cliente";',
+    ]);
+    expect(result.skippedViews).toBe(1);
+  });
+
+  it("o script põe índices depois das FKs e views no fim", () => {
+    const { nodes, edges } = comIndices();
+    const { sql } = generateSqlScript(nodes, edges, "mysql");
+    const posFk = sql.lastIndexOf("FOREIGN KEY");
+    const posIndex = sql.indexOf("CREATE INDEX");
+    const posView = sql.indexOf("CREATE VIEW");
+    expect(posFk).toBeLessThan(posIndex);
+    expect(posIndex).toBeLessThan(posView);
+  });
+
+  it("índices e view executam no pg-mem e o índice único é aplicado", () => {
+    const { nodes, edges } = comIndices();
+    const db = runOnPgMem(nodes, edges);
+    db.public.none(`INSERT INTO "cliente" ("nome", "email") VALUES ('Ana', 'a@x.com')`);
+    expect(db.public.many(`SELECT * FROM "clientes_ativos"`)).toEqual([{ nome: "Ana" }]);
+  });
+
+  it("índices são CREATE INDEX válidos na gramática do MySQL", () => {
+    const { nodes, edges } = comIndices();
+    expect(() => parseAll(nodes.filter((n) => n.type !== "viewNode"), edges, "mysql")).not.toThrow();
   });
 });
 

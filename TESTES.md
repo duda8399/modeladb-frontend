@@ -35,6 +35,7 @@ FC_NUM_RUNS=20000 npx vitest run src/stores/diagramCollabStore.convergence.test.
 | `src/stores/diagramCollabStore.convergence.test.ts` | Propriedades do CRDT com sessões aleatórias de 3 usuários: convergência, independência de ordem, reenvio e causalidade |
 | `src/utils/sqlExport.test.ts` | DDL de MySQL e PostgreSQL, tipos, saneamento, FKs 1:N e N:N, execução no pg-mem e gramática do MySQL |
 | `src/utils/sqlImport.test.ts` | Importação de SQL: MySQL, PostgreSQL, dumps do pg_dump e phpMyAdmin, 1:1/1:N/N:N, layout, entradas inválidas e ida e volta exportar → importar → exportar |
+| `src/utils/viewSql.test.ts` | Análise da consulta de views: tabelas de FROM/JOIN, CTEs, subconsultas e colunas de saída |
 | `src/utils/sqlExport.engines.test.ts` | Os 32 tipos da interface em bancos reais e a matriz de compatibilidade (`reports/sql-compatibility.md`) |
 | `src/services/realtimeService.test.ts` | Contrato do cliente Socket.IO com o gateway, com socket simulado |
 | `src/utils/*.test.ts` | Leitura do token e cores/iniciais de presença |
@@ -42,6 +43,7 @@ FC_NUM_RUNS=20000 npx vitest run src/stores/diagramCollabStore.convergence.test.
 | `e2e/collaboration.spec.ts` | Dois usuários reais: presença, cursores, entidades, atributos, desfazer, concorrência, salvar |
 | `e2e/permissions.spec.ts` | Convite pelo modal, leitor sem edição, usuário sem acesso |
 | `e2e/sql-import.spec.ts` | Importa um `.sql` pelo botão "Importar", confere entidades/arestas no canvas e o salvamento |
+| `e2e/views-indexes.spec.ts` | Índices e views: importação, modal de índices, nova view com consulta, linhas até as tabelas, exportação e persistência |
 | `e2e/perf.spec.ts` | Gera `reports/perf/ui-latency.{md,json}` |
 
 ## Falhas conhecidas documentadas

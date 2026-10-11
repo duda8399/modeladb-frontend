@@ -30,3 +30,15 @@ export type CustomEdge = Edge & {
     fkFieldName?: string;
   };
 };
+
+export interface TableIndex {
+  id: string;
+  name: string;
+  columns: string[];
+  unique: boolean;
+}
+
+export interface ViewNodeData {
+  name: string;
+  sql: string;
+}

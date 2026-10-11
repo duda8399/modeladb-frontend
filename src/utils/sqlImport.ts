@@ -1,18 +1,7 @@
-import type { CustomEdge, CustomNode, Field } from "../types/diagramER";
-
-/**
- * Importação de scripts SQL (DDL) para o formato de diagrama do editor.
- *
- * O parser é propositalmente tolerante: interpreta CREATE TABLE, ALTER TABLE
- * e CREATE UNIQUE INDEX de MySQL/MariaDB e PostgreSQL (inclusive dumps do
- * mysqldump, phpMyAdmin e pg_dump) e ignora o resto do script (INSERT, SET,
- * CREATE DATABASE, funções etc.), em vez de abortar no primeiro comando que
- * não reconhece.
- *
- * Os nós e arestas gerados seguem exatamente o formato que o Constructor
- * produz ao criar entidades e relacionamentos (ver handleRelationConfirm), de
- * modo que o diagrama importado pode ser editado e exportado de volta para SQL.
- */
+import type { CustomEdge, CustomNode, Field, TableIndex } from "../types/diagramER";
+import { Cursor, splitTopLevel, tokenize, type Token } from "./sqlTokenizer";
+import { defaultIndexName } from "./sqlExport";
+import { analyzeViewSql } from "./viewSql";
 
 export class SqlImportError extends Error {}
 
@@ -22,262 +11,10 @@ export type SqlImportResult = {
   warnings: string[];
   tableCount: number;
   relationCount: number;
+  viewCount: number;
+  indexCount: number;
 };
 
-// ---------------------------------------------------------------------------
-// Tokenização
-// ---------------------------------------------------------------------------
-
-type TokenKind = "word" | "ident" | "string" | "number" | "punct";
-
-type Token = { kind: TokenKind; value: string };
-
-const WORD_START = /[\p{L}_]/u;
-const WORD_PART = /[\p{L}\p{N}_$]/u;
-
-/**
- * Converte o script em uma lista de comandos (cada um, uma lista de tokens),
- * descartando comentários. Strings, identificadores entre aspas/crases/
- * colchetes e blocos $tag$...$tag$ do PostgreSQL são respeitados, então um
- * ";" dentro deles não encerra o comando.
- */
-function tokenize(sql: string): Token[][] {
-  const statements: Token[][] = [];
-  let current: Token[] = [];
-  let i = 0;
-  const n = sql.length;
-
-  const push = (kind: TokenKind, value: string) => current.push({ kind, value });
-
-  const readDelimited = (close: string, allowBackslash: boolean): string => {
-    let value = "";
-    i++; // abre
-    while (i < n) {
-      const ch = sql[i];
-      if (allowBackslash && ch === "\\" && i + 1 < n) {
-        value += sql[i + 1];
-        i += 2;
-        continue;
-      }
-      if (ch === close) {
-        if (sql[i + 1] === close) {
-          value += close;
-          i += 2;
-          continue;
-        }
-        i++;
-        return value;
-      }
-      value += ch;
-      i++;
-    }
-    return value;
-  };
-
-  while (i < n) {
-    const ch = sql[i];
-
-    if (/\s/.test(ch)) {
-      i++;
-      continue;
-    }
-
-    // Comentários: -- linha, # linha (MySQL), /* bloco */
-    if ((ch === "-" && sql[i + 1] === "-") || ch === "#") {
-      while (i < n && sql[i] !== "\n") i++;
-      continue;
-    }
-    if (ch === "/" && sql[i + 1] === "*") {
-      const end = sql.indexOf("*/", i + 2);
-      i = end === -1 ? n : end + 2;
-      continue;
-    }
-
-    if (ch === ";") {
-      if (current.length) statements.push(current);
-      current = [];
-      i++;
-      continue;
-    }
-
-    if (ch === "'") {
-      push("string", readDelimited("'", true));
-      continue;
-    }
-    if (ch === '"') {
-      push("ident", readDelimited('"', false));
-      continue;
-    }
-    if (ch === "`") {
-      push("ident", readDelimited("`", false));
-      continue;
-    }
-    if (ch === "[") {
-      const end = sql.indexOf("]", i + 1);
-      const inner = end === -1 ? "" : sql.slice(i + 1, end);
-      // "[nome]" é identificador (SQL Server); "[]" e "[3]" são arrays do PostgreSQL.
-      if (inner.trim() && !/^\s*\d*\s*$/.test(inner) && !inner.includes("\n")) {
-        push("ident", sql.slice(i + 1, end));
-        i = end + 1;
-        continue;
-      }
-      push("punct", ch);
-      i++;
-      continue;
-    }
-
-    // Bloco dollar-quoted do PostgreSQL: $$ ... $$ ou $tag$ ... $tag$
-    if (ch === "$") {
-      const match = /^\$([A-Za-z_][A-Za-z0-9_]*)?\$/.exec(sql.slice(i));
-      if (match) {
-        const tag = match[0];
-        const end = sql.indexOf(tag, i + tag.length);
-        push("string", sql.slice(i + tag.length, end === -1 ? n : end));
-        i = end === -1 ? n : end + tag.length;
-        continue;
-      }
-    }
-
-    if (/[0-9]/.test(ch)) {
-      let value = "";
-      while (i < n && /[0-9.]/.test(sql[i])) value += sql[i++];
-      push("number", value);
-      continue;
-    }
-
-    if (WORD_START.test(ch)) {
-      let value = "";
-      while (i < n && WORD_PART.test(sql[i])) value += sql[i++];
-      push("word", value);
-      continue;
-    }
-
-    push("punct", ch);
-    i++;
-  }
-
-  if (current.length) statements.push(current);
-  return statements;
-}
-
-// ---------------------------------------------------------------------------
-// Cursor sobre os tokens de um comando
-// ---------------------------------------------------------------------------
-
-class Cursor {
-  pos = 0;
-  readonly tokens: Token[];
-
-  constructor(tokens: Token[]) {
-    this.tokens = tokens;
-  }
-
-  get done() {
-    return this.pos >= this.tokens.length;
-  }
-
-  peek(offset = 0): Token | undefined {
-    return this.tokens[this.pos + offset];
-  }
-
-  next(): Token | undefined {
-    return this.tokens[this.pos++];
-  }
-
-  /** Verdadeiro se o token atual é a palavra-chave (sem aspas) indicada. */
-  isWord(word: string, offset = 0): boolean {
-    const token = this.peek(offset);
-    return token?.kind === "word" && token.value.toUpperCase() === word;
-  }
-
-  isPunct(value: string, offset = 0): boolean {
-    const token = this.peek(offset);
-    return token?.kind === "punct" && token.value === value;
-  }
-
-  /** Consome a sequência de palavras-chave, se ela estiver presente. */
-  acceptWords(...words: string[]): boolean {
-    if (!words.every((word, index) => this.isWord(word, index))) return false;
-    this.pos += words.length;
-    return true;
-  }
-
-  acceptPunct(value: string): boolean {
-    if (!this.isPunct(value)) return false;
-    this.pos++;
-    return true;
-  }
-
-  /** Lê um nome possivelmente qualificado (schema.tabela) e devolve a última parte. */
-  readName(): string | null {
-    const first = this.next();
-    if (!first || (first.kind !== "word" && first.kind !== "ident" && first.kind !== "string")) {
-      return null;
-    }
-    let name = first.value;
-    while (this.isPunct(".")) {
-      this.pos++;
-      const part = this.next();
-      if (!part) break;
-      name = part.value;
-    }
-    return name;
-  }
-
-  /** Pula um grupo entre parênteses (o cursor deve estar no "("). */
-  skipGroup(): Token[] {
-    const inner: Token[] = [];
-    if (!this.isPunct("(")) return inner;
-    let depth = 0;
-    while (!this.done) {
-      const token = this.next()!;
-      if (token.kind === "punct" && token.value === "(") {
-        depth++;
-        if (depth === 1) continue;
-      } else if (token.kind === "punct" && token.value === ")") {
-        depth--;
-        if (depth === 0) break;
-      }
-      inner.push(token);
-    }
-    return inner;
-  }
-
-  /** Lê "(a, b, c)" como lista de nomes de coluna. */
-  readNameList(): string[] {
-    return splitTopLevel(this.skipGroup())
-      .map((part) => part.find((t) => t.kind === "word" || t.kind === "ident")?.value)
-      .filter((name): name is string => !!name);
-  }
-}
-
-/** Divide tokens por vírgulas que não estejam dentro de parênteses. */
-function splitTopLevel(tokens: Token[]): Token[][] {
-  const parts: Token[][] = [];
-  let current: Token[] = [];
-  let depth = 0;
-
-  for (const token of tokens) {
-    if (token.kind === "punct") {
-      if (token.value === "(") depth++;
-      else if (token.value === ")") depth--;
-      else if (token.value === "," && depth === 0) {
-        parts.push(current);
-        current = [];
-        continue;
-      }
-    }
-    current.push(token);
-  }
-  if (current.length) parts.push(current);
-  return parts;
-}
-
-// ---------------------------------------------------------------------------
-// Tipos de dados
-// ---------------------------------------------------------------------------
-
-/** Tipos oferecidos no modal de atributos (AttributesModal). */
 const UI_TYPES = new Set([
   "TINYINT", "SMALLINT", "MEDIUMINT", "INT", "BIGINT", "DECIMAL", "FLOAT", "DOUBLE", "BIT",
   "DATE", "DATETIME", "TIMESTAMP", "TIME", "YEAR",
@@ -286,7 +23,6 @@ const UI_TYPES = new Set([
   "BOOLEAN", "JSON", "GEOMETRY", "POINT",
 ]);
 
-/** Tipos com auto incremento embutido (PostgreSQL). */
 const SERIAL_TYPES: Record<string, string> = {
   SMALLSERIAL: "SMALLINT",
   SERIAL2: "SMALLINT",
@@ -296,7 +32,6 @@ const SERIAL_TYPES: Record<string, string> = {
   SERIAL8: "BIGINT",
 };
 
-/** Sinônimos de outros bancos para os tipos que o editor oferece. */
 const TYPE_ALIASES: Record<string, string> = {
   INTEGER: "INT",
   INT4: "INT",
@@ -346,14 +81,12 @@ const TYPE_ALIASES: Record<string, string> = {
   VARBIT: "BIT",
 };
 
-/** Modificadores que não fazem parte do nome do tipo. */
 const TYPE_MODIFIERS = new Set(["UNSIGNED", "SIGNED", "ZEROFILL", "BINARY", "ASCII", "UNICODE"]);
 
 function normalizeType(rawWords: string[], isArray: boolean): { type: string | null; ai: boolean } {
   if (!rawWords.length) return { type: null, ai: false };
 
   const words = rawWords.map((w) => w.toUpperCase());
-  // "BINARY" sozinho é um tipo; como modificador ("VARCHAR(10) BINARY") é descartado.
   const core = words.filter((w, index) => index === 0 || !TYPE_MODIFIERS.has(w));
   const joined = core.join(" ");
 
@@ -361,7 +94,6 @@ function normalizeType(rawWords: string[], isArray: boolean): { type: string | n
   if (SERIAL_TYPES[joined]) return { type: SERIAL_TYPES[joined], ai: true };
   if (TYPE_ALIASES[joined]) return { type: TYPE_ALIASES[joined], ai: false };
 
-  // Ex.: "DOUBLE" seguido de algo não reconhecido -> usa só a primeira palavra.
   if (UI_TYPES.has(joined)) return { type: joined, ai: false };
   if (TYPE_ALIASES[core[0]]) return { type: TYPE_ALIASES[core[0]], ai: false };
   if (SERIAL_TYPES[core[0]]) return { type: SERIAL_TYPES[core[0]], ai: true };
@@ -369,10 +101,6 @@ function normalizeType(rawWords: string[], isArray: boolean): { type: string | n
 
   return { type: joined, ai: false };
 }
-
-// ---------------------------------------------------------------------------
-// Modelo intermediário
-// ---------------------------------------------------------------------------
 
 type ColumnDef = {
   name: string;
@@ -384,10 +112,22 @@ type ColumnDef = {
   ai: boolean;
 };
 
+type IndexDef = {
+  name: string | null;
+  columns: string[];
+  unique: boolean;
+};
+
 type TableDef = {
   name: string;
   columns: ColumnDef[];
   primaryKey: string[];
+  indexes: IndexDef[];
+};
+
+type ViewDef = {
+  name: string;
+  sql: string;
 };
 
 type ForeignKeyDef = {
@@ -396,7 +136,6 @@ type ForeignKeyDef = {
   refTable: string;
 };
 
-/** Palavras que encerram o nome do tipo em uma definição de coluna. */
 const COLUMN_STOP_WORDS = new Set([
   "NOT", "NULL", "PRIMARY", "UNIQUE", "DEFAULT", "AUTO_INCREMENT", "AUTOINCREMENT",
   "REFERENCES", "CHECK", "CONSTRAINT", "GENERATED", "COLLATE", "COMMENT", "ON",
@@ -412,6 +151,7 @@ const TABLE_CONSTRAINT_WORDS = new Set([
 class SchemaBuilder {
   private tables = new Map<string, TableDef>();
   private foreignKeys: ForeignKeyDef[] = [];
+  private views = new Map<string, ViewDef>();
   readonly warnings: string[] = [];
 
   getTable(name: string): TableDef | undefined {
@@ -431,9 +171,11 @@ class SchemaBuilder {
     return this.foreignKeys;
   }
 
-  // -- Comandos ------------------------------------------------------------
+  get allViews(): ViewDef[] {
+    return [...this.views.values()];
+  }
 
-  handleStatement(tokens: Token[]) {
+  handleStatement(tokens: Token[], sql: string) {
     const cur = new Cursor(tokens);
 
     if (cur.acceptWords("CREATE")) {
@@ -442,21 +184,75 @@ class SchemaBuilder {
         this.handleCreateIndex(cur);
         return;
       }
-      while (
-        cur.acceptWords("TEMPORARY") ||
-        cur.acceptWords("TEMP") ||
-        cur.acceptWords("UNLOGGED") ||
-        cur.acceptWords("GLOBAL") ||
-        cur.acceptWords("LOCAL")
-      ) {
-        // modificadores ignorados
+      const viewAt = this.findViewKeyword(cur);
+      if (viewAt !== -1) {
+        cur.pos = viewAt + 1;
+        this.handleCreateView(cur, sql);
+        return;
       }
+      const modifiers = ["TEMPORARY", "TEMP", "UNLOGGED", "GLOBAL", "LOCAL"];
+      while (modifiers.some((word) => cur.acceptWords(word))) continue;
       if (cur.acceptWords("TABLE")) this.handleCreateTable(cur);
       return;
     }
 
     if (cur.acceptWords("ALTER", "TABLE")) {
       this.handleAlterTable(cur);
+      return;
+    }
+
+    if (cur.acceptWords("DROP")) {
+      this.handleDrop(cur);
+    }
+  }
+
+  private findViewKeyword(cur: Cursor): number {
+    for (let i = cur.pos; i < cur.tokens.length; i++) {
+      const token = cur.tokens[i];
+      if (token.kind === "punct" && token.value === "(") return -1;
+      if (token.kind !== "word") continue;
+      const upper = token.value.toUpperCase();
+      if (upper === "VIEW") return i;
+      if (upper === "TABLE" || upper === "AS") return -1;
+    }
+    return -1;
+  }
+
+  private handleCreateView(cur: Cursor, sql: string) {
+    cur.acceptWords("IF", "NOT", "EXISTS");
+    const name = cur.readName();
+    if (!name) return;
+
+    while (!cur.done && !cur.isWord("AS")) {
+      if (cur.isPunct("(")) cur.skipGroup();
+      else cur.next();
+    }
+    if (!cur.acceptWords("AS")) return;
+
+    const first = cur.peek();
+    const last = cur.tokens[cur.tokens.length - 1];
+    if (!first) return;
+
+    this.views.set(name.toLowerCase(), { name, sql: sql.slice(first.start, last.end).trim() });
+  }
+
+  private handleDrop(cur: Cursor) {
+    cur.acceptWords("TEMPORARY");
+    cur.acceptWords("MATERIALIZED");
+    const isTable = cur.acceptWords("TABLE");
+    if (!isTable && !cur.acceptWords("VIEW")) return;
+    cur.acceptWords("IF", "EXISTS");
+
+    for (const part of splitTopLevel(cur.tokens.slice(cur.pos))) {
+      const name = new Cursor(part).readName();
+      if (!name) continue;
+      const key = name.toLowerCase();
+      if (isTable) {
+        this.tables.delete(key);
+        this.foreignKeys = this.foreignKeys.filter((fk) => fk.table.toLowerCase() !== key);
+      } else {
+        this.views.delete(key);
+      }
     }
   }
 
@@ -472,7 +268,7 @@ class SchemaBuilder {
       return;
     }
 
-    const table: TableDef = { name, columns: [], primaryKey: [] };
+    const table: TableDef = { name, columns: [], primaryKey: [], indexes: [] };
     const pendingFks: ForeignKeyDef[] = [];
 
     for (const item of splitTopLevel(cur.skipGroup())) {
@@ -487,7 +283,6 @@ class SchemaBuilder {
       }
     }
 
-    // Um script pode recriar a tabela (DROP + CREATE); vale a última definição.
     const key = name.toLowerCase();
     if (this.tables.has(key)) {
       this.foreignKeys = this.foreignKeys.filter((fk) => fk.table.toLowerCase() !== key);
@@ -505,8 +300,6 @@ class SchemaBuilder {
 
     const table = this.getTable(name);
     if (!table) {
-      // pg_dump emite ALTER TABLE para sequências e views (OWNER TO etc.);
-      // só vale avisar quando o comando mexeria em chaves.
       const words = cur.tokens.map((t) => t.value.toUpperCase());
       if (words.includes("FOREIGN") || words.includes("PRIMARY")) {
         this.warnings.push(`ALTER TABLE ignorado: a tabela "${name}" não foi criada no script.`);
@@ -532,7 +325,6 @@ class SchemaBuilder {
         continue;
       }
 
-      // MySQL/phpMyAdmin: MODIFY [COLUMN] col definição / CHANGE [COLUMN] antigo novo definição
       if (ac.acceptWords("MODIFY") || ac.isWord("CHANGE")) {
         const isChange = ac.acceptWords("CHANGE");
         ac.acceptWords("COLUMN");
@@ -551,8 +343,6 @@ class SchemaBuilder {
         continue;
       }
 
-      // PostgreSQL (pg_dump): ALTER COLUMN col SET DEFAULT nextval(...) / SET NOT NULL /
-      // ADD GENERATED ... AS IDENTITY
       if (ac.acceptWords("ALTER")) {
         ac.acceptWords("COLUMN");
         const columnName = ac.readName();
@@ -570,30 +360,29 @@ class SchemaBuilder {
   private handleCreateIndex(cur: Cursor) {
     const unique = cur.acceptWords("UNIQUE");
     if (!cur.acceptWords("INDEX")) return;
-    if (!unique) return;
+    cur.acceptWords("CONCURRENTLY");
+    cur.acceptWords("IF", "NOT", "EXISTS");
+    const indexName = cur.isWord("ON") ? null : cur.readName();
 
-    while (!cur.done && !cur.isWord("ON")) cur.next();
     if (!cur.acceptWords("ON")) return;
     cur.acceptWords("ONLY");
     const tableName = cur.readName();
     const table = tableName ? this.getTable(tableName) : undefined;
-    if (!table) return;
-
-    while (!cur.done && !cur.isPunct("(")) cur.next(); // USING btree etc.
-    const columns = cur.readNameList();
-    if (columns.length === 1) {
-      const column = this.getColumn(table, columns[0]);
-      if (column) column.unique = true;
+    if (!table) {
+      if (tableName) {
+        this.warnings.push(`O índice "${indexName ?? ""}" foi ignorado: a tabela "${tableName}" não foi criada no script.`);
+      }
+      return;
     }
-  }
 
-  // -- Definições ----------------------------------------------------------
+    while (!cur.done && !cur.isPunct("(")) cur.next();
+    table.indexes.push({ name: indexName, columns: cur.readNameList(), unique });
+  }
 
   private parseColumn(table: TableDef, cur: Cursor, fks: ForeignKeyDef[]): ColumnDef | null {
     const nameToken = cur.next();
     if (!nameToken || (nameToken.kind !== "word" && nameToken.kind !== "ident")) return null;
 
-    // Tipo: palavras (e grupos de parâmetros) até a primeira restrição.
     const typeWords: string[] = [];
     let isArray = false;
     while (!cur.done) {
@@ -614,7 +403,6 @@ class SchemaBuilder {
       if (token.kind !== "word") break;
       const upper = token.value.toUpperCase();
       if (COLUMN_STOP_WORDS.has(upper)) break;
-      // "CHARACTER SET utf8" é charset, mas "CHARACTER VARYING" é tipo.
       if (upper === "CHARACTER" && typeWords.length > 0 && cur.isWord("SET", 1)) break;
       if (upper === "ARRAY") isArray = true;
       else typeWords.push(token.value);
@@ -632,7 +420,6 @@ class SchemaBuilder {
       ai: serial,
     };
 
-    // Restrições: só palavras no nível zero contam (CHECK (...) e DEFAULT '...' são pulados).
     while (!cur.done) {
       if (cur.isPunct("(")) {
         cur.skipGroup();
@@ -670,10 +457,10 @@ class SchemaBuilder {
   }
 
   private applyTableConstraint(table: TableDef, cur: Cursor, fks: ForeignKeyDef[]) {
+    let constraintName: string | null = null;
     if (cur.acceptWords("CONSTRAINT")) {
-      // O nome é opcional no MySQL ("CONSTRAINT FOREIGN KEY ...").
       if (!cur.isWord("PRIMARY") && !cur.isWord("UNIQUE") && !cur.isWord("FOREIGN") && !cur.isWord("CHECK")) {
-        cur.readName();
+        constraintName = cur.readName();
       }
     }
 
@@ -685,27 +472,37 @@ class SchemaBuilder {
     }
 
     if (cur.acceptWords("UNIQUE")) {
-      while (!cur.done && !cur.isPunct("(")) cur.next(); // KEY/INDEX nome
+      if (!cur.acceptWords("KEY")) cur.acceptWords("INDEX");
+      const indexName = cur.isPunct("(") || cur.isWord("USING") ? constraintName : cur.readName();
+      while (!cur.done && !cur.isPunct("(")) cur.next();
       const columns = cur.readNameList();
       if (columns.length === 1) {
         const column = this.getColumn(table, columns[0]);
         if (column) column.unique = true;
+      } else if (columns.length > 1) {
+        table.indexes.push({ name: indexName, columns, unique: true });
       }
       return;
     }
 
+    if (cur.acceptWords("FULLTEXT") || cur.acceptWords("SPATIAL") || cur.isWord("KEY") || cur.isWord("INDEX")) {
+      if (!cur.acceptWords("KEY")) cur.acceptWords("INDEX");
+      const indexName = cur.isPunct("(") || cur.isWord("USING") ? null : cur.readName();
+      while (!cur.done && !cur.isPunct("(")) cur.next();
+      const columns = cur.readNameList();
+      if (columns.length) table.indexes.push({ name: indexName, columns, unique: false });
+      return;
+    }
+
     if (cur.acceptWords("FOREIGN", "KEY")) {
-      while (!cur.done && !cur.isPunct("(")) cur.next(); // nome opcional (MySQL)
+      while (!cur.done && !cur.isPunct("(")) cur.next();
       const columns = cur.readNameList();
       if (!cur.acceptWords("REFERENCES")) return;
       const refTable = cur.readName();
       if (columns.length && refTable) fks.push({ table: table.name, columns, refTable });
     }
-
-    // KEY, INDEX, FULLTEXT, SPATIAL, CHECK, EXCLUDE, LIKE: sem efeito no diagrama.
   }
 
-  /** Marca como PK as colunas listadas na chave primária da tabela. */
   private syncPrimaryKey(table: TableDef) {
     const pkNames = new Set(table.primaryKey.map((c) => c.toLowerCase()));
     for (const column of table.columns) {
@@ -717,28 +514,20 @@ class SchemaBuilder {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Montagem do diagrama
-// ---------------------------------------------------------------------------
-
 const newId = () => globalThis.crypto.randomUUID();
 
 const NODE_WIDTH = 300;
 const COLUMN_GAP = 140;
 const ROW_GAP = 80;
 
-/** Altura aproximada de uma entidade no canvas (cabeçalho + linhas + rodapé). */
-function estimateHeight(fieldCount: number): number {
-  return 90 + Math.max(fieldCount, 1) * 32;
+function estimateHeight(rowCount: number): number {
+  return 90 + Math.max(rowCount, 1) * 32;
 }
 
-/**
- * Layout em camadas: tabelas referenciadas ficam à esquerda e as que apontam
- * para elas, à direita, para as linhas de relacionamento fluírem num sentido.
- * Camadas muito altas são quebradas em mais de uma coluna.
- */
-function layoutTables(
-  tables: TableDef[],
+type LayoutItem = { key: string; height: number };
+
+function layoutItems(
+  items: LayoutItem[],
   dependencies: Map<string, Set<string>>,
 ): Map<string, { x: number; y: number }> {
   const level = new Map<string, number>();
@@ -746,7 +535,7 @@ function layoutTables(
 
   const computeLevel = (key: string): number => {
     if (level.has(key)) return level.get(key)!;
-    if (visiting.has(key)) return 0; // ciclo: quebra aqui
+    if (visiting.has(key)) return 0;
     visiting.add(key);
     let value = 0;
     for (const dep of dependencies.get(key) ?? []) {
@@ -757,14 +546,13 @@ function layoutTables(
     return value;
   };
 
-  const keys = tables.map((t) => t.name.toLowerCase());
-  keys.forEach(computeLevel);
+  items.forEach((item) => computeLevel(item.key));
 
-  const maxPerColumn = Math.max(3, Math.ceil(Math.sqrt(tables.length)));
-  const byLevel = new Map<number, TableDef[]>();
-  for (const table of tables) {
-    const lvl = level.get(table.name.toLowerCase()) ?? 0;
-    byLevel.set(lvl, [...(byLevel.get(lvl) ?? []), table]);
+  const maxPerColumn = Math.max(3, Math.ceil(Math.sqrt(items.length)));
+  const byLevel = new Map<number, LayoutItem[]>();
+  for (const item of items) {
+    const lvl = level.get(item.key) ?? 0;
+    byLevel.set(lvl, [...(byLevel.get(lvl) ?? []), item]);
   }
 
   const positions = new Map<string, { x: number; y: number }>();
@@ -774,12 +562,12 @@ function layoutTables(
     const group = byLevel.get(lvl)!;
     for (let start = 0; start < group.length; start += maxPerColumn) {
       let y = 0;
-      for (const table of group.slice(start, start + maxPerColumn)) {
-        positions.set(table.name.toLowerCase(), {
+      for (const item of group.slice(start, start + maxPerColumn)) {
+        positions.set(item.key, {
           x: columnIndex * (NODE_WIDTH + COLUMN_GAP),
           y,
         });
-        y += estimateHeight(table.columns.length) + ROW_GAP;
+        y += item.height + ROW_GAP;
       }
       columnIndex++;
     }
@@ -788,16 +576,12 @@ function layoutTables(
   return positions;
 }
 
-/**
- * Converte um script SQL (DDL) em nós e arestas do editor.
- * Lança SqlImportError se o script não tiver nenhum CREATE TABLE.
- */
 export function parseSqlToDiagram(sql: string): SqlImportResult {
   const builder = new SchemaBuilder();
 
   for (const statement of tokenize(sql)) {
     try {
-      builder.handleStatement(statement);
+      builder.handleStatement(statement, sql);
     } catch {
       const preview = statement.slice(0, 6).map((t) => t.value).join(" ");
       builder.warnings.push(`Não foi possível interpretar o comando "${preview}...".`);
@@ -805,14 +589,13 @@ export function parseSqlToDiagram(sql: string): SqlImportResult {
   }
 
   const tables = builder.allTables;
-  if (!tables.length) {
-    throw new SqlImportError("Nenhum CREATE TABLE foi encontrado no arquivo SQL.");
+  const views = builder.allViews;
+  if (!tables.length && !views.length) {
+    throw new SqlImportError("Nenhum CREATE TABLE ou CREATE VIEW foi encontrado no arquivo SQL.");
   }
 
   const warnings = [...builder.warnings];
 
-  // Resolve as FKs (só as que apontam para tabelas existentes) e marca as colunas.
-  // Uma mesma FK pode aparecer duas vezes (REFERENCES na coluna + ALTER TABLE).
   const seenFks = new Set<string>();
   const fks = builder.allForeignKeys.filter((fk) => {
     const fkKey = `${fk.table}.${fk.columns.join(",")}`.toLowerCase();
@@ -835,8 +618,6 @@ export function parseSqlToDiagram(sql: string): SqlImportResult {
     return !!refTable;
   });
 
-  // Uma tabela associativa (N:N) tem exatamente duas FKs de uma coluna, para
-  // tabelas diferentes, e a chave primária é formada por essas duas colunas.
   const fksByTable = new Map<string, ForeignKeyDef[]>();
   for (const fk of fks) {
     const key = fk.table.toLowerCase();
@@ -857,16 +638,40 @@ export function parseSqlToDiagram(sql: string): SqlImportResult {
     if (pk.size === 2 && [...pk].every((c) => fkCols.has(c))) junctionKeys.add(key);
   }
 
-  // Dependências para o layout: cada tabela depende das que ela referencia.
+  const tableKey = (name: string) => `t:${name.toLowerCase()}`;
+  const viewKey = (name: string) => `v:${name.toLowerCase()}`;
   const dependencies = new Map<string, Set<string>>();
-  for (const fk of fks) {
-    const key = fk.table.toLowerCase();
-    if (!dependencies.has(key)) dependencies.set(key, new Set());
-    dependencies.get(key)!.add(fk.refTable.toLowerCase());
-  }
-  const positions = layoutTables(tables, dependencies);
+  const addDependency = (from: string, to: string) => {
+    if (!dependencies.has(from)) dependencies.set(from, new Set());
+    dependencies.get(from)!.add(to);
+  };
+  for (const fk of fks) addDependency(tableKey(fk.table), tableKey(fk.refTable));
 
-  // Nós
+  const viewAnalyses = views.map((view) => analyzeViewSql(view.sql));
+  views.forEach((view, index) => {
+    for (const source of viewAnalyses[index].tables) {
+      if (builder.getTable(source)) addDependency(viewKey(view.name), tableKey(source));
+      else if (views.some((v) => v.name.toLowerCase() === source.toLowerCase())) {
+        addDependency(viewKey(view.name), viewKey(source));
+      }
+    }
+  });
+
+  const positions = layoutItems(
+    [
+      ...tables.map((table) => ({
+        key: tableKey(table.name),
+        height: estimateHeight(table.columns.length + table.indexes.length),
+      })),
+      ...views.map((view, index) => ({
+        key: viewKey(view.name),
+        height: estimateHeight(viewAnalyses[index].columns.length),
+      })),
+    ],
+    dependencies,
+  );
+  let indexCount = 0;
+
   const nodeIdByTable = new Map<string, string>();
   const nodes: CustomNode[] = tables.map((table) => {
     const id = newId();
@@ -888,21 +693,49 @@ export function parseSqlToDiagram(sql: string): SqlImportResult {
       warnings.push(`A tabela "${table.name}" tem colunas sem tipo; defina o tipo no editor.`);
     }
 
+    const fieldIdByName = new Map(fields.map((f) => [(f.name ?? "").toLowerCase(), f.id]));
+    const indexes: TableIndex[] = [];
+    for (const index of table.indexes) {
+      const columnNames = index.columns.filter((c) => fieldIdByName.has(c.toLowerCase()));
+      if (columnNames.length !== index.columns.length || !columnNames.length) {
+        warnings.push(
+          `O índice "${index.name ?? index.columns.join(", ")}" da tabela "${table.name}" ` +
+            "usa expressões ou colunas desconhecidas e foi ignorado.",
+        );
+        continue;
+      }
+      indexes.push({
+        id: newId(),
+        name: index.name ?? defaultIndexName(table.name, columnNames),
+        columns: columnNames.map((c) => fieldIdByName.get(c.toLowerCase())!),
+        unique: index.unique,
+      });
+    }
+    indexCount += indexes.length;
+
     return {
       id,
       type: "entityNode",
-      position: positions.get(table.name.toLowerCase()) ?? { x: 0, y: 0 },
-      data: { name: table.name, fields },
+      position: positions.get(tableKey(table.name)) ?? { x: 0, y: 0 },
+      data: indexes.length ? { name: table.name, fields, indexes } : { name: table.name, fields },
     } as CustomNode;
   });
 
-  // Arestas
+  const viewNodes: CustomNode[] = views.map(
+    (view) =>
+      ({
+        id: newId(),
+        type: "viewNode",
+        position: positions.get(viewKey(view.name)) ?? { x: 0, y: 0 },
+        data: { name: view.name, sql: view.sql },
+      }) as CustomNode,
+  );
+
   const edges: CustomEdge[] = [];
   let relationCount = 0;
 
   for (const junctionKey of junctionKeys) {
     const junction = builder.getTable(junctionKey)!;
-    // Ordem das colunas na tabela define origem/destino, como o exportador espera.
     const [first, second] = [...fksByTable.get(junctionKey)!].sort(
       (a, b) =>
         junction.columns.findIndex((c) => c.name.toLowerCase() === a.columns[0].toLowerCase()) -
@@ -930,7 +763,6 @@ export function parseSqlToDiagram(sql: string): SqlImportResult {
     const fkColumn = builder.getColumn(table, fk.columns[0]);
     const fkFieldName = fkColumn?.name ?? fk.columns[0];
 
-    // 1:1 quando a coluna FK não pode se repetir (UNIQUE ou é a própria PK).
     const isOneToOne =
       fk.columns.length === 1 &&
       !!fkColumn &&
@@ -950,5 +782,13 @@ export function parseSqlToDiagram(sql: string): SqlImportResult {
     relationCount++;
   }
 
-  return { nodes, edges, warnings, tableCount: nodes.length, relationCount };
+  return {
+    nodes: [...nodes, ...viewNodes],
+    edges,
+    warnings,
+    tableCount: nodes.length,
+    relationCount,
+    viewCount: viewNodes.length,
+    indexCount,
+  };
 }

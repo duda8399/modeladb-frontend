@@ -10,9 +10,6 @@ import {
   openDiagram,
 } from "./support";
 
-/**
- * Importação de um script SQL pelo botão "Importar" do editor.
- */
 const LOJA_SQL = `
 -- Gerado à mão, estilo MySQL
 CREATE TABLE cliente (
@@ -59,7 +56,6 @@ test("importar um .sql cria as entidades e os relacionamentos no canvas", async 
 
   const names = await Promise.all([0, 1, 2, 3].map((i) => entityNameInput(page, i).inputValue()));
   expect(names.sort()).toEqual(["cliente", "pedido", "pedido_produto", "produto"]);
-  // 1 aresta 1:N (cliente -> pedido) + 2 arestas da tabela associativa (N:N).
   await expect(page.locator(".react-flow__edge")).toHaveCount(3);
 
   await page.screenshot({ path: process.env.SQL_IMPORT_SHOT || "test-results/sql-import.png" });

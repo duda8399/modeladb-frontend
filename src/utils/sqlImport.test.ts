@@ -3,14 +3,7 @@ import { describe, expect, it } from "vitest";
 import { parseSqlToDiagram, SqlImportError } from "./sqlImport";
 import { generateSqlBlocks, type SqlDialect } from "./sqlExport";
 import { ALL_UI_TYPES, diagramArb } from "../test/erArbitraries";
-import type { CustomNode, Field } from "../types/diagramER";
-
-/**
- * Importação SQL -> diagrama.
- * Cobre scripts escritos à mão, dumps reais (mysqldump/phpMyAdmin/pg_dump) e
- * a ida e volta com o exportador: exportar -> importar -> exportar de novo
- * precisa gerar o mesmo SQL.
- */
+import type { CustomNode, Field, TableIndex } from "../types/diagramER";
 
 const tableByName = (nodes: CustomNode[], name: string) => {
   const node = nodes.find((n) => (n.data as { name: string }).name === name);
@@ -177,7 +170,10 @@ describe("PostgreSQL", () => {
     expect(flags(field(nodes, "users", "id"))).toEqual({
       type: "INT", pk: true, fk: false, notNull: true, unique: false, ai: true,
     });
-    expect(field(nodes, "users", "email")).toMatchObject({ unique: true, notNull: true });
+    expect(field(nodes, "users", "email")).toMatchObject({ unique: false, notNull: true });
+    expect((tableByName(nodes, "users").data as { indexes: TableIndex[] }).indexes).toEqual([
+      { id: expect.any(String), name: "users_email_key", columns: [field(nodes, "users", "email").id], unique: true },
+    ]);
     expect(field(nodes, "users", "updated_at").type).toBe("TIMESTAMP");
     expect(field(nodes, "posts", "id")).toMatchObject({ pk: true, ai: true });
     expect(field(nodes, "posts", "user_id").fk).toBe(true);
@@ -315,12 +311,156 @@ describe("entradas inválidas", () => {
   });
 });
 
+const indexesOf = (node: CustomNode) => (node.data as { indexes?: TableIndex[] }).indexes ?? [];
+
+describe("índices", () => {
+  it("lê KEY/INDEX, UNIQUE composto, FULLTEXT e CREATE INDEX", () => {
+    const { nodes, indexCount } = parseSqlToDiagram(`
+      CREATE TABLE produto (
+        id INT PRIMARY KEY,
+        nome VARCHAR(80),
+        marca VARCHAR(40),
+        descricao TEXT,
+        sku VARCHAR(20),
+        KEY idx_nome (nome),
+        INDEX (marca),
+        UNIQUE KEY uq_marca_nome (marca, nome),
+        FULLTEXT KEY ft_descricao (descricao),
+        UNIQUE (sku)
+      );
+      CREATE INDEX IF NOT EXISTS idx_marca_sku ON public.produto USING btree (marca, sku DESC);
+      CREATE UNIQUE INDEX CONCURRENTLY uq_lower ON produto (lower(nome));
+    `);
+    const produto = tableByName(nodes, "produto");
+    const id = (column: string) => field(nodes, "produto", column).id;
+
+    expect(indexCount).toBe(5);
+    expect(indexesOf(produto).map(({ name, columns, unique }) => ({ name, columns, unique }))).toEqual([
+      { name: "idx_nome", columns: [id("nome")], unique: false },
+      { name: "idx_produto_marca", columns: [id("marca")], unique: false },
+      { name: "uq_marca_nome", columns: [id("marca"), id("nome")], unique: true },
+      { name: "ft_descricao", columns: [id("descricao")], unique: false },
+      { name: "idx_marca_sku", columns: [id("marca"), id("sku")], unique: false },
+    ]);
+    expect(field(nodes, "produto", "sku").unique).toBe(true);
+  });
+
+  it("índice com expressão é ignorado com aviso", () => {
+    const { warnings } = parseSqlToDiagram(
+      "CREATE TABLE p (nome TEXT); CREATE INDEX idx_lower ON p (lower(nome));",
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("idx_lower");
+  });
+
+  it("ALTER TABLE ADD INDEX e ADD UNIQUE composto", () => {
+    const { nodes } = parseSqlToDiagram(`
+      CREATE TABLE t (a INT, b INT);
+      ALTER TABLE t ADD INDEX idx_a (a), ADD CONSTRAINT uq_ab UNIQUE (a, b);
+    `);
+    expect(indexesOf(tableByName(nodes, "t")).map((i) => [i.name, i.unique])).toEqual([
+      ["idx_a", false],
+      ["uq_ab", true],
+    ]);
+  });
+});
+
+describe("views", () => {
+  it("CREATE VIEW vira viewNode com a consulta original", () => {
+    const { nodes, viewCount } = parseSqlToDiagram(`
+      CREATE TABLE cliente (id INT PRIMARY KEY, nome TEXT, ativo BOOLEAN);
+      -- comentário
+      CREATE OR REPLACE VIEW public.clientes_ativos AS
+        SELECT id, nome FROM cliente WHERE ativo = true
+        WITH CHECK OPTION;
+    `);
+    const view = nodes.find((n) => n.type === "viewNode")!;
+
+    expect(viewCount).toBe(1);
+    expect(view.data).toEqual({
+      name: "clientes_ativos",
+      sql: "SELECT id, nome FROM cliente WHERE ativo = true\n        WITH CHECK OPTION",
+    });
+    expect(view.position.x).toBeGreaterThan(tableByName(nodes, "cliente").position.x);
+  });
+
+  it("entende o formato do mysqldump (comentários executáveis e DROP)", () => {
+    const { nodes, warnings } = parseSqlToDiagram(`
+      DROP TABLE IF EXISTS \`cliente\`;
+      CREATE TABLE \`cliente\` (\`id\` int NOT NULL, PRIMARY KEY (\`id\`));
+      DROP TABLE IF EXISTS \`resumo\`;
+      /*!50001 DROP VIEW IF EXISTS \`resumo\`*/;
+      /*!50001 CREATE VIEW \`resumo\` AS SELECT
+       1 AS \`id\`*/;
+      /*!50001 DROP VIEW IF EXISTS \`resumo\`*/;
+      /*!50001 CREATE ALGORITHM=UNDEFINED */
+      /*!50013 DEFINER=\`root\`@\`localhost\` SQL SECURITY DEFINER */
+      /*!50001 VIEW \`resumo\` AS select \`cliente\`.\`id\` AS \`id\` from \`cliente\` */;
+    `);
+
+    expect(nodes.map((n) => [n.type, (n.data as { name: string }).name])).toEqual([
+      ["entityNode", "cliente"],
+      ["viewNode", "resumo"],
+    ]);
+    expect((nodes[1].data as { sql: string }).sql).toBe("select `cliente`.`id` AS `id` from `cliente`");
+    expect(warnings).toEqual([]);
+  });
+
+  it("script só com views também é aceito", () => {
+    const { tableCount, viewCount } = parseSqlToDiagram("CREATE VIEW v AS SELECT 1;");
+    expect([tableCount, viewCount]).toEqual([0, 1]);
+  });
+
+  it("CREATE TABLE chamado view_x não é confundido com view", () => {
+    const { tableCount, viewCount } = parseSqlToDiagram("CREATE TABLE view_x (id INT);");
+    expect([tableCount, viewCount]).toEqual([1, 0]);
+  });
+});
+
+const withIndexesAndViews = (types: string[]) =>
+  diagramArb(types).chain(({ nodes, edges }) =>
+    fc
+      .record({
+        specs: fc.array(
+          fc.record({
+            table: fc.nat(),
+            columns: fc.uniqueArray(fc.nat({ max: 6 }), { minLength: 1, maxLength: 3 }),
+            unique: fc.boolean(),
+          }),
+          { maxLength: 4 },
+        ),
+        withView: fc.boolean(),
+      })
+      .map(({ specs, withView }) => {
+        const entities = nodes.filter((n) => n.type === "entityNode");
+        specs.forEach((spec, k) => {
+          const node = entities[spec.table % entities.length];
+          const fields = (node.data as { fields: Field[] }).fields;
+          const columns = [...new Set(spec.columns.map((c) => fields[c % fields.length].id))];
+          const data = node.data as { indexes?: TableIndex[] };
+          data.indexes = [...(data.indexes ?? []), { id: `i${k}`, name: `idx_${k}`, columns, unique: spec.unique }];
+        });
+        const view = {
+          id: "v",
+          type: "viewNode",
+          position: { x: 0, y: 0 },
+          data: { name: "resumo", sql: "SELECT count(*) AS total FROM x WHERE a = 'b;c'" },
+        } as CustomNode;
+        return { nodes: withView ? [...nodes, view] : nodes, edges };
+      }),
+  );
+
 describe("ida e volta com o exportador", () => {
   const roundTrip = (dialect: SqlDialect) =>
     fc.assert(
-      fc.property(diagramArb(ALL_UI_TYPES), ({ nodes, edges }) => {
+      fc.property(withIndexesAndViews(ALL_UI_TYPES), ({ nodes, edges }) => {
         const first = generateSqlBlocks(nodes, edges, dialect);
-        const script = [...first.blocks.map((b) => b.sql), ...first.foreignKeyStatements].join("\n\n");
+        const script = [
+          ...first.blocks.map((b) => b.sql),
+          ...first.foreignKeyStatements,
+          ...first.indexStatements,
+          ...first.viewBlocks.map((b) => b.sql),
+        ].join("\n\n");
 
         const imported = parseSqlToDiagram(first.header + script + first.footer);
         const second = generateSqlBlocks(imported.nodes, imported.edges, dialect);
@@ -328,6 +468,8 @@ describe("ida e volta com o exportador", () => {
         expect(imported.warnings).toEqual([]);
         expect(second.blocks.map((b) => b.sql)).toEqual(first.blocks.map((b) => b.sql));
         expect([...second.foreignKeyStatements].sort()).toEqual([...first.foreignKeyStatements].sort());
+        expect(second.indexStatements).toEqual(first.indexStatements);
+        expect(second.viewBlocks.map((b) => b.sql)).toEqual(first.viewBlocks.map((b) => b.sql));
       }),
       { numRuns: 200 },
     );

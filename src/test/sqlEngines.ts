@@ -5,8 +5,8 @@ import type { CustomEdge, CustomNode } from "../types/diagramER";
 
 /** Apenas os comandos de DDL (sem CREATE DATABASE/USE), na ordem de execução. */
 export function ddlStatements(nodes: CustomNode[], edges: CustomEdge[], dialect: SqlDialect) {
-  const { blocks, foreignKeyStatements } = generateSqlBlocks(nodes, edges, dialect);
-  return [...blocks.map((b) => b.sql), ...foreignKeyStatements];
+  const { blocks, foreignKeyStatements, indexStatements, viewBlocks } = generateSqlBlocks(nodes, edges, dialect);
+  return [...blocks.map((b) => b.sql), ...foreignKeyStatements, ...indexStatements, ...viewBlocks.map((b) => b.sql)];
 }
 
 /** Executa o DDL PostgreSQL num banco PostgreSQL emulado em memória (pg-mem). */

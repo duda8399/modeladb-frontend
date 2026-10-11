@@ -1,4 +1,4 @@
-import type { CustomEdge, CustomNode, Field } from "../types/diagramER";
+import type { CustomEdge, CustomNode, Field, TableIndex } from "../types/diagramER";
 
 export type SqlDialect = "mysql" | "postgres";
 
@@ -224,8 +224,42 @@ export type SqlBlocksResult = {
   footer: string;
   blocks: SqlBlock[];
   foreignKeyStatements: string[];
+  indexStatements: string[];
+  viewBlocks: SqlBlock[];
   skippedFields: number;
+  skippedViews: number;
 };
+
+export function defaultIndexName(table: string, columns: string[]): string {
+  return sanitizeIdentifier(`idx_${table}_${columns.join("_")}`, "idx");
+}
+
+function buildIndexStatements(node: CustomNode, dialect: SqlDialect): string[] {
+  const indexes = ((node.data as { indexes?: TableIndex[] })?.indexes || []) as TableIndex[];
+  const fieldsById = new Map(getValidFields(node).map((field) => [field.id, field]));
+  const table = getTableName(node);
+
+  return indexes.flatMap((index) => {
+    const columns = index.columns
+      .map((fieldId) => fieldsById.get(fieldId)?.name)
+      .filter((name): name is string => !!name);
+    if (!columns.length) return [];
+
+    const name = index.name?.trim() || defaultIndexName(table, columns);
+    const columnList = columns.map((column) => quote(column, dialect)).join(", ");
+    return [
+      `CREATE ${index.unique ? "UNIQUE " : ""}INDEX ${quote(name, dialect)} ` +
+        `ON ${quote(table, dialect)} (${columnList});`,
+    ];
+  });
+}
+
+function buildViewStatement(node: CustomNode, dialect: SqlDialect): string | null {
+  const data = node.data as { name?: string; sql?: string };
+  const query = (data?.sql || "").trim().replace(/;+\s*$/, "").trim();
+  if (!query) return null;
+  return `CREATE VIEW ${quote(data.name || "view_sem_nome", dialect)} AS\n${query};`;
+}
 
 function buildFkStatement(fk: ForeignKey, dialect: SqlDialect): string {
   const constraintName = sanitizeConstraintName(`fk_${fk.table}_${fk.column}`);
@@ -267,6 +301,19 @@ export function generateSqlBlocks(
   // CREATE TABLE forem executados, então as constraints são emitidas à parte.
   const foreignKeyStatements = foreignKeys.map((fk) => buildFkStatement(fk, dialect));
 
+  const indexStatements = entityNodes.flatMap((node) => buildIndexStatements(node, dialect));
+
+  let skippedViews = 0;
+  const viewBlocks: SqlBlock[] = [];
+  for (const node of nodes.filter((n) => n.type === "viewNode")) {
+    const statement = buildViewStatement(node, dialect);
+    if (!statement) {
+      skippedViews++;
+      continue;
+    }
+    viewBlocks.push({ key: node.id, title: (node.data as { name?: string })?.name || "", sql: statement });
+  }
+
   const dbName = sanitizeDatabaseName(databaseName || "modeladb");
 
   const header =
@@ -275,7 +322,16 @@ export function generateSqlBlocks(
       : `-- Gerado pelo ModelaDB\n-- O PostgreSQL não permite criar um banco e usá-lo na mesma sessão.\n-- Após criar o banco, conecte-se a ele antes de rodar o restante do script.\n-- Se estiver usando o psql, use o comando: \\c ${dbName}\nCREATE DATABASE "${dbName}";\n\n`;
   const footer = dialect === "mysql" ? "\n\nSET FOREIGN_KEY_CHECKS=1;\n" : "\n";
 
-  return { header, footer, blocks, foreignKeyStatements, skippedFields };
+  return {
+    header,
+    footer,
+    blocks,
+    foreignKeyStatements,
+    indexStatements,
+    viewBlocks,
+    skippedFields,
+    skippedViews,
+  };
 }
 
 export function generateSqlScript(
@@ -283,18 +339,28 @@ export function generateSqlScript(
   edges: CustomEdge[],
   dialect: SqlDialect,
   databaseName?: string,
-): { sql: string; skippedFields: number } {
-  const { header, footer, blocks, foreignKeyStatements, skippedFields } =
-    generateSqlBlocks(nodes, edges, dialect, databaseName);
+): { sql: string; skippedFields: number; skippedViews: number } {
+  const {
+    header,
+    footer,
+    blocks,
+    foreignKeyStatements,
+    indexStatements,
+    viewBlocks,
+    skippedFields,
+    skippedViews,
+  } = generateSqlBlocks(nodes, edges, dialect, databaseName);
 
   const sections = [
     blocks.map((block) => block.sql).join("\n\n"),
     ...(foreignKeyStatements.length ? [foreignKeyStatements.join("\n\n")] : []),
-  ];
+    ...(indexStatements.length ? [indexStatements.join("\n")] : []),
+    ...(viewBlocks.length ? [viewBlocks.map((block) => block.sql).join("\n\n")] : []),
+  ].filter(Boolean);
 
   const sql = header + sections.join("\n\n") + footer;
 
-  return { sql, skippedFields };
+  return { sql, skippedFields, skippedViews };
 }
 
 export function downloadTextFile(

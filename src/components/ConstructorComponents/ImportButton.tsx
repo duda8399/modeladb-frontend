@@ -27,8 +27,6 @@ export function ImportButton({
   onBeforeImportReplace,
 }: ImportButtonProps) {
   const [modal, modalContextHolder] = Modal.useModal();
-  // A API estática (message.success) não renderiza com React 19 no antd v5;
-  // o hook usa o contexto da árvore e funciona.
   const [messageApi, messageContextHolder] = message.useMessage();
   const [importing, setImporting] = useState(false);
 
@@ -86,21 +84,33 @@ export function ImportButton({
     reader.readAsText(file);
   };
 
-  // Script SQL (DDL): cada CREATE TABLE vira uma entidade e cada chave
-  // estrangeira, um relacionamento. O nome do diagrama é mantido.
   const importSql = (content: string) => {
     try {
-      const { nodes: importedNodes, edges: importedEdges, warnings, tableCount, relationCount } =
-        parseSqlToDiagram(content);
+      const {
+        nodes: importedNodes,
+        edges: importedEdges,
+        warnings,
+        tableCount,
+        relationCount,
+        viewCount,
+        indexCount,
+      } = parseSqlToDiagram(content);
 
       onBeforeImportReplace();
       setNodes(importedNodes);
       setEdges(importedEdges);
 
-      const tablesText = tableCount === 1 ? "1 tabela" : `${tableCount} tabelas`;
-      const relationsText =
-        relationCount === 1 ? "1 relacionamento" : `${relationCount} relacionamentos`;
-      messageApi.success(`SQL importado: ${tablesText} e ${relationsText}`);
+      const count = (value: number, singular: string, plural: string) =>
+        `${value} ${value === 1 ? singular : plural}`;
+      const parts = [
+        count(tableCount, "tabela", "tabelas"),
+        count(relationCount, "relacionamento", "relacionamentos"),
+        ...(indexCount ? [count(indexCount, "índice", "índices")] : []),
+        ...(viewCount ? [count(viewCount, "view", "views")] : []),
+      ];
+      const summary =
+        parts.length > 1 ? `${parts.slice(0, -1).join(", ")} e ${parts[parts.length - 1]}` : parts[0];
+      messageApi.success(`SQL importado: ${summary}`);
 
       if (warnings.length) {
         modal.warning({

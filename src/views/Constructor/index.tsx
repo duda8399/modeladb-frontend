@@ -21,6 +21,8 @@ import {
   getNodesBounds,
   getViewportForBounds,
   useReactFlow,
+  MarkerType,
+  type NodeProps,
 } from "reactflow";
 import { SidebarConstructor } from "./SidebarConstructor";
 import { Layout, message } from "antd";
@@ -34,10 +36,16 @@ import RelationModal from "../../components/ConstructorComponents/RelationModal"
 import ShareModal from "../../components/ConstructorComponents/ShareModal";
 import { EdgeActionsContext } from "../../components/ConstructorComponents/EdgeActionsContext";
 import FloatingEdge from "../../components/ConstructorComponents/FloatingEdge";
+import ViewNode from "../../components/ConstructorComponents/ViewNode";
+import ViewEdge from "../../components/ConstructorComponents/ViewEdge";
+import { analyzeViewSql } from "../../utils/viewSql";
+import { normalizeSqlName } from "../../utils/identifiers";
 import type {
   CustomEdge,
   CustomNode,
   Field,
+  TableIndex,
+  ViewNodeData,
 } from "../../types/diagramER";
 import { useParams } from "react-router-dom";
 import { api } from "../../services/api";
@@ -349,9 +357,21 @@ const ConstructorPage: React.FC = () => {
         onDelete={() => deleteNodeWithCascade(props.id)}
         onRename={(value: string) => setNodeProp(props.id, "name", value)}
         onFieldsChange={(fields: Field[]) => onFieldsChange(props.id, fields)}
+        onIndexesChange={(indexes: TableIndex[]) => setNodeProp(props.id, "indexes", indexes)}
       />
     ),
     [deleteNodeWithCascade, setNodeProp, onFieldsChange],
+  );
+  const ViewNodeConnected = useCallback(
+    (props: NodeProps<ViewNodeData>) => (
+      <ViewNode
+        {...props}
+        onDelete={() => deleteNodeWithCascade(props.id)}
+        onRename={(value: string) => setNodeProp(props.id, "name", value)}
+        onSqlChange={(sql: string) => setNodeProp(props.id, "sql", sql)}
+      />
+    ),
+    [deleteNodeWithCascade, setNodeProp],
   );
   const NoteNodeConnected = useCallback(
     (props: any) => (
@@ -392,8 +412,10 @@ const ConstructorPage: React.FC = () => {
       noteNode: NoteNodeConnected,
       sectionNode: SectionNodeConnected,
       textNode: TextNodeConnected,
+      viewNode: ViewNodeConnected,
     }),
     [
+      ViewNodeConnected,
       EntityNodeConnected,
       NoteNodeConnected,
       SectionNodeConnected,
@@ -401,7 +423,45 @@ const ConstructorPage: React.FC = () => {
     ],
   );
 
-  const edgeTypes = useMemo(() => ({ floating: FloatingEdge }), []);
+  const edgeTypes = useMemo(() => ({ floating: FloatingEdge, viewEdge: ViewEdge }), []);
+
+  const viewSourcesKey = useMemo(
+    () =>
+      JSON.stringify(
+        nodes
+          .filter((node) => node.type === "entityNode" || node.type === "viewNode")
+          .map((node) => {
+            const data = node.data as { name?: string; sql?: string } | undefined;
+            return [node.id, node.type, data?.name ?? "", data?.sql ?? ""];
+          }),
+      ),
+    [nodes],
+  );
+
+  const viewEdges = useMemo<CustomEdge[]>(() => {
+    const entries = JSON.parse(viewSourcesKey) as [string, string, string, string][];
+    const idByName = new Map(entries.map(([nodeId, , name]) => [normalizeSqlName(name), nodeId]));
+
+    return entries
+      .filter(([, type]) => type === "viewNode")
+      .flatMap(([viewId, , , sql]) =>
+        analyzeViewSql(sql)
+          .tables.map((table) => idByName.get(normalizeSqlName(table)))
+          .filter((sourceId): sourceId is string => !!sourceId && sourceId !== viewId)
+          .map((sourceId) => ({
+            id: `view-source:${viewId}:${sourceId}`,
+            source: sourceId,
+            target: viewId,
+            type: "viewEdge",
+            selectable: false,
+            deletable: false,
+            focusable: false,
+            markerEnd: { type: MarkerType.ArrowClosed, color: "#90A4AE" },
+          })),
+      );
+  }, [viewSourcesKey]);
+
+  const renderedEdges = useMemo(() => [...edges, ...viewEdges], [edges, viewEdges]);
   const edgeActions = useMemo(
     () => ({ onRemove: deleteEdgeWithCascade, readOnly: isViewer }),
     [deleteEdgeWithCascade, isViewer],
@@ -795,6 +855,19 @@ const ConstructorPage: React.FC = () => {
     sendOp({ type: "ADD_NODE", targetId: newNode.id, payload: newNode });
   }, [sendOp, getNewNodePosition]);
 
+  const addViewNode = useCallback(() => {
+    const viewCount = useDiagramCollabStore
+      .getState()
+      .nodes.filter((node) => node.type === "viewNode" && !node.data.deleted).length;
+    const newNode = {
+      id: crypto.randomUUID(),
+      type: "viewNode",
+      position: getNewNodePosition(),
+      data: { name: `view_${viewCount + 1}`, sql: "" },
+    };
+    sendOp({ type: "ADD_NODE", targetId: newNode.id, payload: newNode });
+  }, [sendOp, getNewNodePosition]);
+
   const addEntityNode = useCallback(() => {
     const newNode = {
       id: crypto.randomUUID(),
@@ -1177,6 +1250,7 @@ const ConstructorPage: React.FC = () => {
       >
         <SidebarConstructor
           onAddEntity={addEntityNode}
+          onAddView={addViewNode}
           onAddNote={addNoteNode}
           onAddSection={addSectionNode}
           onAddText={addTextNode}
@@ -1202,7 +1276,7 @@ const ConstructorPage: React.FC = () => {
           <EdgeActionsContext.Provider value={edgeActions}>
           <ReactFlow
             nodes={nodes}
-            edges={edges}
+            edges={renderedEdges}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             connectionMode={ConnectionMode.Loose}

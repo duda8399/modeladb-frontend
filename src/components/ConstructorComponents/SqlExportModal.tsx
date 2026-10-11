@@ -34,6 +34,7 @@ export function SqlExportModal({
   const [messageApi, contextHolder] = message.useMessage();
   const [script, setScript] = useState("");
   const [skippedFields, setSkippedFields] = useState(0);
+  const [skippedViews, setSkippedViews] = useState(0);
 
   useEffect(() => {
     if (!open) return;
@@ -41,6 +42,7 @@ export function SqlExportModal({
     const generated = generateSqlScript(nodes, edges, dialect, diagramName);
     setScript(generated.sql);
     setSkippedFields(generated.skippedFields);
+    setSkippedViews(generated.skippedViews);
   }, [open, dialect, nodes, edges, diagramName]);
 
   const handleDownload = () => {
@@ -108,6 +110,15 @@ export function SqlExportModal({
           showIcon
           style={{ marginBottom: 12 }}
           message={`${skippedFields} atributo(s) sem nome ou tipo foram ignorados na exportação.`}
+        />
+      )}
+
+      {skippedViews > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message={`${skippedViews} view(s) sem consulta foram ignoradas na exportação.`}
         />
       )}
 

@@ -1,10 +1,11 @@
 import { memo, useEffect, useState } from "react";
 import { Card, Row, Col, Button, Input } from "antd";
-import { CloseOutlined, KeyOutlined } from "@ant-design/icons";
+import { CloseOutlined, KeyOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import AttributesModal from "./AttributesModal";
+import IndexesModal from "./IndexesModal";
 import DeleteModal from "./DeleteModal";
 import { Handle, Position } from "reactflow";
-import type { Field } from "../../types/diagramER";
+import type { Field, TableIndex } from "../../types/diagramER";
 import { FkIcon } from "./FieldIcons";
 
 interface Props {
@@ -12,10 +13,12 @@ interface Props {
   data: {
     fields?: Field[];
     name?: string;
+    indexes?: TableIndex[];
   };
   onDelete?: () => void;
   onRename?: (value: string) => void;
   onFieldsChange?: (fields: Field[]) => void;
+  onIndexesChange?: (indexes: TableIndex[]) => void;
 }
 
 export default memo(function EntityNode({
@@ -23,9 +26,19 @@ export default memo(function EntityNode({
   onDelete,
   onRename,
   onFieldsChange,
+  onIndexesChange,
 }: Props) {
   const fields = data.fields || [];
+  const indexes = data.indexes || [];
+  const fieldNameById = new Map(fields.map((field) => [field.id, field.name]));
+  const visibleIndexes = indexes
+    .map((index) => ({
+      ...index,
+      columnNames: index.columns.map((id) => fieldNameById.get(id)).filter(Boolean) as string[],
+    }))
+    .filter((index) => index.columnNames.length > 0);
   const [open, setOpen] = useState(false);
+  const [openIndexes, setOpenIndexes] = useState(false);
   const [openDelete, setOpenDelete] = useState(false);
   const [entityName, setEntityName] = useState(data.name || "Entidade");
   const [isEditingName, setIsEditingName] = useState(false);
@@ -56,6 +69,16 @@ export default memo(function EntityNode({
         fields={fields}
         setFields={(newFields) => onFieldsChange?.(newFields)}
       />
+
+      {openIndexes && (
+        <IndexesModal
+          onClose={() => setOpenIndexes(false)}
+          tableName={entityName}
+          fields={fields}
+          indexes={indexes}
+          onSave={(newIndexes) => onIndexesChange?.(newIndexes)}
+        />
+      )}
 
       <Card
         size="small"
@@ -159,20 +182,72 @@ export default memo(function EntityNode({
           </Row>
         ))}
 
+        {visibleIndexes.length > 0 && (
+          <div
+            data-testid="entity-indexes"
+            style={{ borderTop: "1px solid #e0e0e0", background: "#fafafa", padding: "4px 8px" }}
+          >
+            {visibleIndexes.map((index) => (
+              <div
+                key={index.id}
+                title={`${index.unique ? "UNIQUE " : ""}INDEX ${index.name} (${index.columnNames.join(", ")})`}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  fontSize: 12,
+                  color: "#555555",
+                  padding: "2px 0",
+                  minWidth: 0,
+                }}
+              >
+                <ThunderboltOutlined style={{ color: "#1677ff" }} />
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
+                  {index.name} ({index.columnNames.join(", ")})
+                </span>
+                {index.unique && (
+                  <span
+                    style={{
+                      marginLeft: "auto",
+                      fontSize: 10,
+                      fontWeight: 600,
+                      color: "#1677ff",
+                      border: "1px solid #91caff",
+                      borderRadius: 4,
+                      padding: "0 4px",
+                    }}
+                  >
+                    ÚNICO
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
         <div
           style={{
             borderTop: "1px solid #f0f0f0",
             padding: 6,
             display: "flex",
             justifyContent: "center",
+            gap: 6,
           }}
         >
           <Button
             type="text"
-            style={{ background: "#d9d9d9", color: "#333333", width: "100%" }}
+            style={{ background: "#d9d9d9", color: "#333333", flex: 1 }}
             onClick={() => setOpen(true)}
           >
             Configurar atributos
+          </Button>
+          <Button
+            type="text"
+            icon={<ThunderboltOutlined />}
+            style={{ background: "#d9d9d9", color: "#333333" }}
+            onClick={() => setOpenIndexes(true)}
+          >
+            Índices
           </Button>
         </div>
 
