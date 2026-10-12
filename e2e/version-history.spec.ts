@@ -43,7 +43,7 @@ test("salva, compara e restaura versões, avisando os colaboradores", async ({ b
   await expect(entityNodes(page)).toHaveCount(1);
   await waitSaved(page);
 
-  await chooseMoreOption(page, "Histórico");
+  await page.getByRole("button", { name: "Histórico" }).click();
   await expect(items(page)).toHaveCount(1);
   await expect(items(page).first()).toContainText("Salvamento automático");
   await expect(items(page).first()).toContainText("1 tabela · 0 relacionamentos");
@@ -63,7 +63,7 @@ test("salva, compara e restaura versões, avisando os colaboradores", async ({ b
   await openDiagram(editorPage, diagramId);
   await expect(entityNodes(editorPage)).toHaveCount(2);
 
-  await chooseMoreOption(page, "Histórico");
+  await page.getByRole("button", { name: "Histórico" }).click();
   const entrega = items(page).filter({ hasText: "Entrega 1" });
   await entrega.getByRole("button", { name: "Visualizar" }).click();
   const preview = page.locator(".ant-modal").filter({ hasText: "Mudanças feitas desde esta versão" });
@@ -91,7 +91,7 @@ test("salva, compara e restaura versões, avisando os colaboradores", async ({ b
 
   const viewerPage = await (await loggedInContext(browser, viewer)).newPage();
   await openDiagram(viewerPage, diagramId);
-  await chooseMoreOption(viewerPage, "Histórico");
+  await viewerPage.getByRole("button", { name: "Histórico" }).click();
   await expect(items(viewerPage)).toHaveCount(3);
   await expect(drawer(viewerPage).getByRole("button", { name: "Salvar versão" })).toHaveCount(0);
   await expect(drawer(viewerPage).getByRole("button", { name: "Restaurar" })).toHaveCount(0);

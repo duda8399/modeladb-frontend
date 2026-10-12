@@ -107,7 +107,7 @@ export function avatar(page: Page, email: string) {
   return page.locator(`[title="${email}"]`);
 }
 
-export async function chooseMoreOption(page: Page, option: "Importar" | "Exportar" | "Histórico") {
+export async function chooseMoreOption(page: Page, option: "Importar" | "Exportar") {
   await page.getByRole("button", { name: "Mais opções" }).click();
   await page.getByRole("menuitem", { name: option }).click();
 }

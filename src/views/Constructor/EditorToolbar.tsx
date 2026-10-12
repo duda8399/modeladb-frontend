@@ -147,13 +147,11 @@ export function EditorToolbar({
       ? []
       : [{ key: "import", icon: <ImportOutlined />, label: "Importar", disabled: diagramImport.importing }]),
     { key: "export", icon: <ExportOutlined />, label: "Exportar" },
-    { key: "history", icon: <HistoryOutlined />, label: "Histórico" },
   ];
 
   const handleMoreClick: MenuProps["onClick"] = ({ key }) => {
     if (key === "import") diagramImport.startImport();
     if (key === "export") downloadDiagramJson(diagramName, nodes, edges);
-    if (key === "history") onOpenHistory();
   };
 
   useEffect(() => {
@@ -502,6 +500,9 @@ export function EditorToolbar({
         <SaveStatusText status={saveStatus} lastSavedAt={lastSavedAt} />
         <Button type="primary" onClick={onSave} loading={saving} disabled={readOnly}>
           Salvar
+        </Button>
+        <Button title="Histórico de versões" icon={<HistoryOutlined />} onClick={onOpenHistory}>
+          Histórico
         </Button>
         {diagramImport.contextHolder}
         <Dropdown menu={{ items: moreItems, onClick: handleMoreClick }} trigger={["click"]} placement="bottomRight">

@@ -193,7 +193,7 @@ test("a barra lateral mostra DER em ícones e abre o gerador da IA num painel", 
   await expect(drawer.getByRole("button", { name: "Gerar diagrama" })).toBeEnabled();
 
   await page.keyboard.press("Escape");
-  await chooseMoreOption(page, "Histórico");
+  await page.getByRole("button", { name: "Histórico" }).click();
   await expect(page.locator(".ant-drawer").filter({ hasText: "Histórico de versões" })).toBeVisible();
   assertNoErrors();
 });
