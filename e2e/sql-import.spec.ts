@@ -8,6 +8,7 @@ import {
   getDiagramViaApi,
   loggedInContext,
   openDiagram,
+  chooseMoreOption,
 } from "./support";
 
 const LOJA_SQL = `
@@ -45,7 +46,7 @@ test("importar um .sql cria as entidades e os relacionamentos no canvas", async 
   const assertNoErrors = failOnPageErrors(page);
   await openDiagram(page, diagramId);
 
-  await page.getByRole("button", { name: "Importar" }).click();
+  await chooseMoreOption(page, "Importar");
   const chooserPromise = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "Continuar" }).click();
   const chooser = await chooserPromise;

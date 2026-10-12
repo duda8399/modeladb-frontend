@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CloseOutlined, HolderOutlined } from "@ant-design/icons";
+import { CloseOutlined, FileTextOutlined, HolderOutlined } from "@ant-design/icons";
 import {
   Button,
   Checkbox,
@@ -14,7 +14,14 @@ import {
 } from "antd";
 import type { Field } from "../../types/diagramER";
 import { PkIcon, FkIcon } from "./FieldIcons";
-import { isSizedType, isValidSize, normalizeSize, sizePlaceholder } from "../../utils/sqlTypes";
+import {
+  isSizedType,
+  isValidSize,
+  isValueListType,
+  normalizeSize,
+  normalizeValues,
+  sizePlaceholder,
+} from "../../utils/sqlTypes";
 
 const { Title, Text } = Typography;
 
@@ -76,6 +83,9 @@ interface Props {
   setOpen: (state: boolean) => void;
   fields: Field[];
   setFields: (fields: Field[]) => void;
+  tableName?: string;
+  tableDescription?: string | null;
+  onTableDescriptionChange?: (description: string | null) => void;
 }
 
 // Mantem o valor digitado em estado local ate o blur, para nao disparar um
@@ -171,7 +181,16 @@ export default function Attributes({
   setOpen,
   fields,
   setFields,
+  tableName,
+  tableDescription,
+  onTableDescriptionChange,
 }: Readonly<Props>) {
+  const [descriptionToggles, setDescriptionToggles] = useState<Record<string, boolean>>({});
+
+  const isDescriptionOpen = (field: Field) => descriptionToggles[field.id] ?? !!field.description;
+
+  const toggleDescription = (field: Field) =>
+    setDescriptionToggles((current) => ({ ...current, [field.id]: !isDescriptionOpen(field) }));
 
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
@@ -231,7 +250,12 @@ export default function Attributes({
     setFields(
       fields.map((field) =>
         field.id === id
-          ? { ...field, type, size: isValidSize(type, field.size) ? field.size ?? null : null }
+          ? {
+              ...field,
+              type,
+              size: isValidSize(type, field.size) ? field.size ?? null : null,
+              values: isValueListType(type) ? normalizeValues(field.values, type) : null,
+            }
           : field,
       ),
     );
@@ -274,7 +298,7 @@ export default function Attributes({
             borderBottom: "1px solid #f0f0f0",
           }}
         >
-          Configurar atributos
+          Configurar atributos{tableName?.trim() ? ` - Tabela ${tableName.trim()}` : ""}
         </Title>
       }
     >
@@ -283,6 +307,20 @@ export default function Attributes({
         size="middle"
         style={{ width: "100%", paddingRight: 24 }}
       >
+        {onTableDescriptionChange && (
+          <div>
+            <Text strong>Descrição da tabela</Text>
+            <div style={{ marginTop: 6 }}>
+              <CommitCell
+                ariaLabel="Descrição da tabela"
+                value={tableDescription ?? ""}
+                placeholder="Para que serve esta tabela (exportada como COMMENT)"
+                onCommit={onTableDescriptionChange}
+              />
+            </div>
+          </div>
+        )}
+
         <div
           style={{
             display: "flex",
@@ -299,17 +337,17 @@ export default function Attributes({
               <Text strong>Coluna</Text>
             </Col>
 
-          <Col span={4}>
+          <Col span={3}>
             <Text strong>Tipo</Text>
           </Col>
 
-          <Col span={2}>
-            <Tooltip title="Tamanho (VARCHAR, CHAR, BINARY), precisão e escala (DECIMAL) ou frações de segundo (DATETIME, TIMESTAMP, TIME)">
-              <Text strong>Tamanho</Text>
+          <Col span={3}>
+            <Tooltip title="Tamanho (VARCHAR, CHAR, BINARY), precisão e escala (DECIMAL), frações de segundo (DATETIME, TIMESTAMP, TIME) ou a lista de valores (ENUM, SET)">
+              <Text strong>Tamanho / valores</Text>
             </Tooltip>
           </Col>
 
-          <Col span={3}>
+          <Col span={2}>
             <Tooltip title="Valor padrão em SQL, ex.: 0, 'ativo', CURRENT_TIMESTAMP">
               <Text strong>Padrão</Text>
             </Tooltip>
@@ -341,7 +379,7 @@ export default function Attributes({
             <Text strong>Unique</Text>
           </Col>
 
-            <Col span={1} />
+            <Col span={2} />
           </Row>
         </div>
 
@@ -390,7 +428,7 @@ export default function Attributes({
               />
             </Col>
 
-            <Col span={4}>
+            <Col span={3}>
               <Select
                 value={field.type ?? undefined}
                 style={{ width: "100%" }}
@@ -402,7 +440,23 @@ export default function Attributes({
               />
             </Col>
 
-            <Col span={2}>
+            <Col span={3}>
+              {isValueListType(field.type) ? (
+                <Select
+                  aria-label="Valores permitidos"
+                  mode="tags"
+                  style={{ width: "100%" }}
+                  value={normalizeValues(field.values, field.type)}
+                  placeholder="Digite e tecle Enter"
+                  tokenSeparators={[","]}
+                  maxTagCount="responsive"
+                  suffixIcon={null}
+                  status={normalizeValues(field.values, field.type).length ? undefined : "error"}
+                  onChange={(values: string[]) =>
+                    updateField(field.id, "values", normalizeValues(values, field.type))
+                  }
+                />
+              ) : (
               <CommitCell
                 ariaLabel="Tamanho"
                 value={field.size ?? ""}
@@ -416,9 +470,10 @@ export default function Attributes({
                 }
                 onCommit={(value) => updateField(field.id, "size", value ? normalizeSize(value) : null)}
               />
+              )}
             </Col>
 
-            <Col span={3}>
+            <Col span={2}>
               <CommitCell
                 ariaLabel="Valor padrão"
                 value={field.defaultValue ?? ""}
@@ -472,7 +527,17 @@ export default function Attributes({
               />
             </Col>
 
-            <Col span={1}>
+            <Col span={2} style={{ display: "flex" }}>
+              <Tooltip title={field.description ? "Editar descrição" : "Adicionar descrição"}>
+                <Button
+                  type="text"
+                  aria-label="Descrição da coluna"
+                  aria-pressed={isDescriptionOpen(field)}
+                  style={{ color: field.description ? "#2F7D32" : "#8c8c8c", border: "none" }}
+                  icon={<FileTextOutlined />}
+                  onClick={() => toggleDescription(field)}
+                />
+              </Tooltip>
               <Tooltip title="Remover atributo">
                 <Button
                   type="text"
@@ -482,6 +547,16 @@ export default function Attributes({
                 />
               </Tooltip>
             </Col>
+            {isDescriptionOpen(field) && (
+              <Col span={24} style={{ marginTop: 6 }}>
+                <CommitCell
+                  ariaLabel={`Descrição de ${field.name || "coluna"}`}
+                  value={field.description ?? ""}
+                  placeholder="Descrição da coluna (exportada como COMMENT)"
+                  onCommit={(value) => updateField(field.id, "description", value)}
+                />
+              </Col>
+            )}
             </Row>
           </div>
         ))}

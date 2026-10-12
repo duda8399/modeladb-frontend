@@ -21,6 +21,8 @@ export type DocumentRestoredEvent = {
 
 export type CollaboratorRole = "EDITOR" | "VIEWER";
 
+export type DocumentRenamedEvent = { diagramId: string; name: string; byUserId: string };
+
 export type RoleChangedEvent = { diagramId: string; role: CollaboratorRole };
 
 export type AccessRevokedEvent = {
@@ -47,6 +49,7 @@ type ConnectParams = {
   onError?: (error: RealtimeError) => void;
   onDocumentRestored?: (event: DocumentRestoredEvent) => void;
   onRoleChanged?: (event: RoleChangedEvent) => void;
+  onDocumentRenamed?: (event: DocumentRenamedEvent) => void;
   onAccessRevoked?: (event: AccessRevokedEvent) => void;
   onStatusChange?: (status: ConnectionStatus, pendingCount: number) => void;
   onResyncNeeded?: () => Promise<void> | void;
@@ -125,6 +128,7 @@ class RealtimeService {
     socket.on("error", (error: RealtimeError) => params.onError?.(error));
     socket.on("document_restored", (event: DocumentRestoredEvent) => params.onDocumentRestored?.(event));
     socket.on("role_changed", (event: RoleChangedEvent) => params.onRoleChanged?.(event));
+    socket.on("document_renamed", (event: DocumentRenamedEvent) => params.onDocumentRenamed?.(event));
     socket.on("access_revoked", (event: AccessRevokedEvent) => params.onAccessRevoked?.(event));
 
     this.socket = socket;

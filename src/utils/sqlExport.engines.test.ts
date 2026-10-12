@@ -31,9 +31,6 @@ function expectOk(result: { ok: boolean; error?: string }) {
   expect(result.ok ? "ok" : result.error).toBe("ok");
 }
 
-// Tipos que o MySQL só aceita com parâmetros (lista de valores ou tamanho).
-const MYSQL_KNOWN_INVALID = ["ENUM", "SET", "VARBINARY"];
-
 describe.skipIf(!process.env.SQL_ENGINES)("exportação SQL em bancos reais", () => {
   beforeAll(() => {
     engines = startEngines();
@@ -48,16 +45,20 @@ describe.skipIf(!process.env.SQL_ENGINES)("exportação SQL em bancos reais", ()
       expectOk(engines.runPostgres(postgresDdl([table("t", [pk(), col("c", type)])])));
     });
 
-    it.each(ALL_UI_TYPES.filter((t) => !MYSQL_KNOWN_INVALID.includes(t)))(
-      "MySQL 8.4 aceita uma coluna %s",
-      (type) => {
-        expectOk(engines.runMySql(mysqlScript([table("t", [pk(), col("c", type)])])));
-      },
-    );
-
-    // Limitação conhecida: o tipo é exportado sem os parâmetros obrigatórios.
-    it.fails.each(MYSQL_KNOWN_INVALID)("MySQL 8.4 aceita uma coluna %s", (type) => {
+    it.each(ALL_UI_TYPES)("MySQL 8.4 aceita uma coluna %s", (type) => {
       expectOk(engines.runMySql(mysqlScript([table("t", [pk(), col("c", type)])])));
+    });
+
+    it.each(["ENUM", "SET"])("os dois bancos aceitam %s com lista de valores e descrições", (type) => {
+      const nodes = [
+        table("t", [
+          pk(),
+          col("c", type, { values: ["a", "b'c", "d\\e"], description: "valores d'ele" }),
+        ]),
+      ];
+      (nodes[0].data as { description?: string }).description = "tabela \\ com 'aspas'";
+      expectOk(engines.runMySql(mysqlScript(nodes)));
+      expectOk(engines.runPostgres(postgresDdl(nodes)));
     });
   });
 
@@ -100,7 +101,6 @@ describe.skipIf(!process.env.SQL_ENGINES)("exportação SQL em bancos reais", ()
 
     const notKeyableInMySql = ["TINYTEXT", "TEXT", "MEDIUMTEXT", "LONGTEXT", "TINYBLOB", "BLOB", "MEDIUMBLOB", "LONGBLOB", "JSON", "GEOMETRY", "POINT"];
     const expected = [
-      ...MYSQL_KNOWN_INVALID.flatMap((t) => ["simples", "UNIQUE", "PK"].map((v) => `mysql ${v} ${t}`)),
       ...notKeyableInMySql.flatMap((t) => [`mysql UNIQUE ${t}`, `mysql PK ${t}`]),
       "postgres UNIQUE POINT",
       "postgres PK POINT",
@@ -153,8 +153,6 @@ describe.skipIf(!process.env.SQL_ENGINES)("exportação SQL em bancos reais", ()
   });
 
   describe("propriedade: diagramas aleatórios executam nos dois bancos", () => {
-    const portableTypes = ALL_UI_TYPES.filter((t) => !MYSQL_KNOWN_INVALID.includes(t));
-
     it("PostgreSQL 16", () => {
       fc.assert(
         fc.property(diagramArb(ALL_UI_TYPES, KEYABLE_TYPES), ({ nodes, edges }) => {
@@ -166,7 +164,7 @@ describe.skipIf(!process.env.SQL_ENGINES)("exportação SQL em bancos reais", ()
 
     it("MySQL 8.4", () => {
       fc.assert(
-        fc.property(diagramArb(portableTypes, KEYABLE_TYPES), ({ nodes, edges }) => {
+        fc.property(diagramArb(ALL_UI_TYPES, KEYABLE_TYPES), ({ nodes, edges }) => {
           expectOk(engines.runMySql(mysqlScript(nodes, edges)));
         }),
         { numRuns: 25 },

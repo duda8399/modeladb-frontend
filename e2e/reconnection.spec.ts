@@ -33,7 +33,7 @@ test("as edições feitas com a conexão caída chegam nos dois lados quando ela
   await openDiagram(editorPage, diagramId);
 
   const editorStatus = editorPage.locator("[data-connection-status]");
-  await expect(editorStatus).toHaveAttribute("data-connection-status", "connected");
+  await expect(editorStatus).toHaveCount(0);
 
   await addEntity(ownerPage);
   await expect(entityNodes(editorPage)).toHaveCount(1);
@@ -50,8 +50,7 @@ test("as edições feitas com a conexão caída chegam nos dois lados quando ela
   await expect(entityNodes(editorPage)).toHaveCount(1);
 
   await editorContext.setOffline(false);
-  await expect(editorStatus).toHaveAttribute("data-connection-status", "connected", { timeout: 15_000 });
-  await expect(editorStatus).not.toContainText("aguardando");
+  await expect(editorStatus).toHaveCount(0, { timeout: 15_000 });
 
   await expect(entityNodes(editorPage)).toHaveCount(2);
   await expect(entityNameInput(ownerPage, 0)).toHaveValue("EditadaOffline");

@@ -268,6 +268,11 @@ const ConstructorPage: React.FC = () => {
     onResyncNeeded: resyncFromServer,
     onDocumentRestored: handleDocumentRestored,
     onError: (error) => messageApi.error(error.message),
+    onDocumentRenamed: (event) => {
+      if (event.diagramId !== id) return;
+      setDiagramName(event.name);
+      if (event.byUserId !== userId) messageApi.info(`O diagrama foi renomeado para "${event.name}".`);
+    },
     onRoleChanged: (event) => {
       setCurrentUserRole(event.role);
       messageApi.info(
@@ -478,7 +483,7 @@ const ConstructorPage: React.FC = () => {
   );
 
   const handleGenerate = useCallback(
-    async (prompt: string) => {
+    async (prompt: string): Promise<boolean> => {
       setGenerating(true);
 
       try {
@@ -498,9 +503,11 @@ const ConstructorPage: React.FC = () => {
         replaceDocument(generatedNodes, generatedEdges);
 
         messageApi.success("Diagrama gerado com sucesso");
+        return true;
       } catch (error) {
         const serverMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
         messageApi.error(serverMessage || "Não foi possível gerar o diagrama");
+        return false;
       } finally {
         setGenerating(false);
       }

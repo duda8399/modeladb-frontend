@@ -7,10 +7,12 @@ import {
   DatabaseOutlined,
   EditOutlined,
   ExportOutlined,
+  EyeOutlined,
   FileOutlined,
   FontSizeOutlined,
   KeyOutlined,
   RobotOutlined,
+  TableOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
 import { SiMysql, SiPostgresql } from "react-icons/si";
@@ -18,19 +20,7 @@ import { api } from "../../services/api";
 import type { SqlDialect } from "../../utils/sqlExport";
 import type { CustomEdge, CustomNode } from "../../types/diagramER";
 import { SqlExportModal } from "../../components/ConstructorComponents/SqlExportModal";
-
-const nodeStyle = {
-  padding: "8px 10px",
-  border: "1px solid #e5e7eb",
-  borderRadius: 8,
-  background: "#fff",
-  cursor: "grab",
-  fontSize: 13,
-  marginBottom: 8,
-  transition: "all 0.2s",
-  fontWeight: "normal",
-  textAlign: "center" as const,
-};
+import AiGenerateDrawer from "../../components/ConstructorComponents/AiGenerateDrawer";
 
 interface Props {
   onAddEntity: () => void;
@@ -38,7 +28,7 @@ interface Props {
   onAddNote: () => void;
   onAddSection: () => void;
   onAddText: () => void;
-  onGenerate?: (prompt: string) => void;
+  onGenerate?: (prompt: string) => Promise<boolean> | void;
   onAnalyze?: () => void;
   generating?: boolean;
   diagramName: string;
@@ -64,6 +54,7 @@ export function SidebarConstructor({
   readOnly = false,
 }: Props) {
   const [prompt, setPrompt] = useState("");
+  const [generateOpen, setGenerateOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [tokenLoading, setTokenLoading] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
@@ -91,7 +82,15 @@ export function SidebarConstructor({
       return;
     }
 
-    if (await ensureOpenAIToken("generate")) onGenerate?.(prompt);
+    if (await ensureOpenAIToken("generate")) await runGenerate();
+  }
+
+  async function runGenerate() {
+    const ok = await onGenerate?.(prompt);
+    if (ok) {
+      setGenerateOpen(false);
+      setPrompt("");
+    }
   }
 
   async function ensureOpenAIToken(purpose: "generate" | "analyze"): Promise<boolean> {
@@ -144,7 +143,7 @@ export function SidebarConstructor({
       setModalOpen(false);
       tokenForm.resetFields();
       if (tokenPurpose === "analyze") onAnalyze?.();
-      else onGenerate?.(prompt);
+      else await runGenerate();
     } catch {
       messageApi.error("Erro ao salvar a chave de API.");
     } finally {
@@ -214,38 +213,28 @@ export function SidebarConstructor({
           <span style={{ fontWeight: "bold" }}>IA do ModelaDB</span>
         </div>
 
-        <Input.TextArea
-          placeholder="Descreva seu banco de dados..."
-          autoSize={{ minRows: 2, maxRows: 5 }}
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          disabled={generating}
-        />
-
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            paddingTop: 8,
-          }}
-        >
-          <Button
-            style={{
-              backgroundColor: "#2F7D32",
-              color: "#fff",
-            }}
-            icon={<ThunderboltOutlined />}
-            onClick={handleGenerateClick}
-            loading={generating}
-            disabled={readOnly}
-          >
-            Gerar
-          </Button>
-        </div>
-
-        <Button block icon={<BulbOutlined />} onClick={handleAnalyzeClick} style={{ marginTop: 8 }}>
+        <Button block icon={<BulbOutlined />} onClick={handleAnalyzeClick}>
           Analisar modelo
         </Button>
+        <Button
+          block
+          icon={<ThunderboltOutlined />}
+          onClick={() => setGenerateOpen(true)}
+          loading={generating}
+          disabled={readOnly}
+          style={{ marginTop: 8 }}
+        >
+          Gerar com IA
+        </Button>
+        <AiGenerateDrawer
+          open={generateOpen}
+          onClose={() => setGenerateOpen(false)}
+          prompt={prompt}
+          onPromptChange={setPrompt}
+          generating={!!generating}
+          readOnly={readOnly}
+          onGenerate={handleGenerateClick}
+        />
       </div>
 
       <div
@@ -317,24 +306,34 @@ export function SidebarConstructor({
           }}
         >
           <DatabaseOutlined style={{ color: "#fa8c16", fontSize: 16 }} />
-          <span style={{ fontWeight: "bold" }}>ER</span>
+          <span style={{ fontWeight: "bold" }}>DER</span>
         </div>
 
         <div
-          style={
-            readOnly ? { ...nodeStyle, opacity: 0.5, cursor: "not-allowed" } : nodeStyle
-          }
-          onClick={readOnly ? undefined : onAddEntity}
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: 6,
+          }}
         >
-          Adicionar Entidade
-        </div>
-        <div
-          style={
-            readOnly ? { ...nodeStyle, opacity: 0.5, cursor: "not-allowed" } : nodeStyle
-          }
-          onClick={readOnly ? undefined : onAddView}
-        >
-          Adicionar View
+          <Button
+            block
+            title="Adicionar Entidade"
+            aria-label="Adicionar Entidade"
+            style={{ height: 60 }}
+            onClick={onAddEntity}
+            disabled={readOnly}
+            icon={<TableOutlined style={{ fontSize: 20, color: "#2F7D32" }} />}
+          />
+          <Button
+            block
+            title="Adicionar View"
+            aria-label="Adicionar View"
+            style={{ height: 60 }}
+            onClick={onAddView}
+            disabled={readOnly}
+            icon={<EyeOutlined style={{ fontSize: 20, color: "#1565C0" }} />}
+          />
         </div>
       </div>
 

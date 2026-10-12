@@ -88,6 +88,7 @@ describe("MySQL", () => {
           sourceNodeId: cliente.id,
           targetNodeId: pedido.id,
           fkFieldName: "cliente_id",
+          fkFieldId: field(nodes, "pedido", "cliente_id").id,
           onDelete: "CASCADE",
         },
       },
@@ -611,4 +612,45 @@ describe("ida e volta com o exportador", () => {
 
   it("MySQL: exportar -> importar -> exportar gera o mesmo script", () => roundTrip("mysql"));
   it("PostgreSQL: exportar -> importar -> exportar gera o mesmo script", () => roundTrip("postgres"));
+});
+
+describe("ENUM, SET e descrições", () => {
+  it("lê a lista de valores de ENUM e SET do MySQL", () => {
+    const { nodes } = parseSqlToDiagram(
+      "CREATE TABLE p (id INT PRIMARY KEY, s ENUM('a', 'b''c', 'a') NOT NULL, t SET('x','y'));",
+    );
+    expect(field(nodes, "p", "s")).toMatchObject({ type: "ENUM", values: ["a", "b'c"], notNull: true });
+    expect(field(nodes, "p", "t")).toMatchObject({ type: "SET", values: ["x", "y"] });
+  });
+
+  it("transforma o CHECK IN de uma coluna TEXT do PostgreSQL em ENUM", () => {
+    const { nodes } = parseSqlToDiagram(
+      `CREATE TABLE "p" ("id" SERIAL, "s" TEXT CHECK ("s" IN ('a', 'b')), "o" TEXT CHECK ("o" <> ''), PRIMARY KEY ("id"));`,
+    );
+    expect(field(nodes, "p", "s")).toMatchObject({ type: "ENUM", values: ["a", "b"] });
+    expect(field(nodes, "p", "o").type).toBe("TEXT");
+    expect(checksOf(tableByName(nodes, "p")).map((c) => c.expression)).toEqual([`"o" <> ''`]);
+  });
+
+  it("lê COMMENT de coluna e de tabela no MySQL", () => {
+    const { nodes } = parseSqlToDiagram(
+      "CREATE TABLE c (id INT PRIMARY KEY COMMENT 'chave', nome TEXT COMMENT 'nome d''ele') ENGINE=InnoDB COMMENT='clientes';",
+    );
+    const cliente = tableByName(nodes, "c");
+    expect((cliente.data as { description?: string }).description).toBe("clientes");
+    expect(field(nodes, "c", "id").description).toBe("chave");
+    expect(field(nodes, "c", "nome").description).toBe("nome d'ele");
+  });
+
+  it("lê COMMENT ON TABLE e COMMENT ON COLUMN do PostgreSQL", () => {
+    const { nodes } = parseSqlToDiagram(`
+      CREATE TABLE public.c (id INT PRIMARY KEY, nome TEXT);
+      COMMENT ON TABLE public.c IS 'clientes';
+      COMMENT ON COLUMN public.c.nome IS 'nome completo';
+      COMMENT ON COLUMN c.id IS NULL;
+    `);
+    expect((tableByName(nodes, "c").data as { description?: string }).description).toBe("clientes");
+    expect(field(nodes, "c", "nome").description).toBe("nome completo");
+    expect(field(nodes, "c", "id").description).toBeUndefined();
+  });
 });

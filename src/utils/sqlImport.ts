@@ -1,7 +1,7 @@
 import type { CustomEdge, CustomNode, Field, FkAction, TableCheck, TableIndex } from "../types/diagramER";
 import { Cursor, splitTopLevel, tokenize, type Token } from "./sqlTokenizer";
 import { defaultCheckName, defaultIndexName } from "./sqlExport";
-import { isSizedType, isValidSize } from "./sqlTypes";
+import { isSizedType, isValidSize, isValueListType, normalizeValues } from "./sqlTypes";
 import { analyzeViewSql } from "./viewSql";
 
 export class SqlImportError extends Error {}
@@ -113,6 +113,8 @@ type ColumnDef = {
   ai: boolean;
   size: string | null;
   defaultValue: string | null;
+  values: string[];
+  description: string | null;
 };
 
 type CheckDef = {
@@ -132,6 +134,7 @@ type TableDef = {
   primaryKey: string[];
   indexes: IndexDef[];
   checks: CheckDef[];
+  description: string | null;
 };
 
 type ViewDef = {
@@ -168,6 +171,26 @@ function normalizeDefault(text: string): { value: string | null; ai: boolean } {
   if (/^\(-?\d+(?:\.\d+)?\)$/.test(value)) value = value.slice(1, -1);
   if (/^NULL$/i.test(value)) return { value: null, ai: false };
   return { value: value || null, ai: false };
+}
+
+function parseEnumCheck(expression: string, columnName: string): string[] | null {
+  const statements = tokenize(expression);
+  if (statements.length !== 1) return null;
+  const cur = new Cursor(statements[0]);
+  const name = cur.next();
+  if (!name || (name.kind !== "word" && name.kind !== "ident") || name.value.toLowerCase() !== columnName.toLowerCase()) {
+    return null;
+  }
+  if (!cur.acceptWords("IN") || !cur.isPunct("(")) return null;
+  const inner = cur.skipGroup();
+  if (!cur.done || !inner.length) return null;
+  const values: string[] = [];
+  for (const [index, token] of inner.entries()) {
+    const expectComma = index % 2 === 1;
+    if (expectComma ? !(token.kind === "punct" && token.value === ",") : token.kind !== "string") return null;
+    if (!expectComma) values.push(token.value);
+  }
+  return values.length ? normalizeValues(values) : null;
 }
 
 const COLUMN_STOP_WORDS = new Set([
@@ -236,6 +259,11 @@ class SchemaBuilder {
       return;
     }
 
+    if (cur.acceptWords("COMMENT", "ON")) {
+      this.handleComment(cur);
+      return;
+    }
+
     if (cur.acceptWords("ALTER", "TABLE")) {
       this.handleAlterTable(cur);
       return;
@@ -244,6 +272,31 @@ class SchemaBuilder {
     if (cur.acceptWords("DROP")) {
       this.handleDrop(cur);
     }
+  }
+
+  private handleComment(cur: Cursor) {
+    const isTable = cur.acceptWords("TABLE");
+    if (!isTable && !cur.acceptWords("COLUMN")) return;
+
+    const parts: string[] = [];
+    while (!cur.done && !cur.isWord("IS")) {
+      const token = cur.next()!;
+      if (token.kind === "word" || token.kind === "ident") parts.push(token.value);
+    }
+    if (!cur.acceptWords("IS")) return;
+    const literal = cur.next();
+    const text = literal?.kind === "string" ? literal.value || null : null;
+
+    if (isTable) {
+      const table = parts.length ? this.getTable(parts[parts.length - 1]) : undefined;
+      if (table) table.description = text;
+      return;
+    }
+
+    if (parts.length < 2) return;
+    const table = this.getTable(parts[parts.length - 2]);
+    const column = table ? this.getColumn(table, parts[parts.length - 1]) : undefined;
+    if (column) column.description = text;
   }
 
   private findViewKeyword(cur: Cursor): number {
@@ -308,10 +361,21 @@ class SchemaBuilder {
       return;
     }
 
-    const table: TableDef = { name, columns: [], primaryKey: [], indexes: [], checks: [] };
+    const table: TableDef = { name, columns: [], primaryKey: [], indexes: [], checks: [], description: null };
     const pendingFks: ForeignKeyDef[] = [];
 
-    for (const item of splitTopLevel(cur.skipGroup())) {
+    const items = splitTopLevel(cur.skipGroup());
+    while (!cur.done) {
+      if (cur.acceptWords("COMMENT")) {
+        cur.acceptPunct("=");
+        const token = cur.next();
+        if (token?.kind === "string") table.description = token.value || null;
+      } else {
+        cur.next();
+      }
+    }
+
+    for (const item of items) {
       if (!item.length) continue;
       const first = item[0];
 
@@ -438,12 +502,16 @@ class SchemaBuilder {
     const typeWords: string[] = [];
     let isArray = false;
     let rawSize: string | null = null;
+    let rawValues: string[] = [];
     while (!cur.done) {
       const token = cur.peek()!;
       if (token.kind === "punct") {
         if (token.value === "(") {
           const inner = cur.skipGroup();
-          if (rawSize === null && typeWords.length) rawSize = inner.map((t) => t.value).join("");
+          if (rawSize === null && typeWords.length) {
+            rawSize = inner.map((t) => t.value).join("");
+            rawValues = inner.filter((t) => t.kind === "string").map((t) => t.value);
+          }
           continue;
         }
         if (token.value === "[") {
@@ -474,6 +542,8 @@ class SchemaBuilder {
       ai: serial,
       size: rawSize && isSizedType(type) && isValidSize(type, rawSize) ? rawSize : null,
       defaultValue: null,
+      values: isValueListType(type) ? normalizeValues(rawValues, type) : [],
+      description: null,
     };
 
     let constraintName: string | null = null;
@@ -488,8 +558,18 @@ class SchemaBuilder {
       }
       if (cur.acceptWords("CHECK")) {
         const expression = this.readGroupText(cur);
-        if (expression) table.checks.push({ name: constraintName, expression });
+        const enumValues = constraintName === null && expression ? parseEnumCheck(expression, column.name) : null;
+        if (enumValues && (column.type === "TEXT" || column.type === "VARCHAR")) {
+          column.type = "ENUM";
+          column.size = null;
+          column.values = enumValues;
+        } else if (expression) {
+          table.checks.push({ name: constraintName, expression });
+        }
         constraintName = null;
+      } else if (cur.acceptWords("COMMENT")) {
+        const token = cur.next();
+        if (token?.kind === "string") column.description = token.value || null;
       } else if (cur.acceptWords("NOT", "NULL")) column.notNull = true;
       else if (cur.acceptWords("PRIMARY", "KEY")) column.pk = true;
       else if (cur.acceptWords("UNIQUE")) {
@@ -827,6 +907,8 @@ export function parseSqlToDiagram(sql: string): SqlImportResult {
       ai: column.ai,
       ...(column.size ? { size: column.size } : {}),
       ...(column.defaultValue ? { defaultValue: column.defaultValue } : {}),
+      ...(column.values.length ? { values: column.values } : {}),
+      ...(column.description ? { description: column.description } : {}),
       order: index,
     }));
 
@@ -867,6 +949,7 @@ export function parseSqlToDiagram(sql: string): SqlImportResult {
       data: {
         name: table.name,
         fields,
+        ...(table.description ? { description: table.description } : {}),
         ...(indexes.length ? { indexes } : {}),
         ...(checks.length ? { checks } : {}),
       },
@@ -928,6 +1011,8 @@ export function parseSqlToDiagram(sql: string): SqlImportResult {
     const targetNodeId = nodeIdByTable.get(fk.table.toLowerCase())!;
     const fkColumn = builder.getColumn(table, fk.columns[0]);
     const fkFieldName = fkColumn?.name ?? fk.columns[0];
+    const targetFields = (nodes.find((n) => n.id === targetNodeId)?.data as { fields?: Field[] })?.fields ?? [];
+    const fkFieldId = targetFields.find((f) => f.name?.toLowerCase() === fkFieldName.toLowerCase())?.id;
 
     const isOneToOne =
       fk.columns.length === 1 &&
@@ -943,7 +1028,14 @@ export function parseSqlToDiagram(sql: string): SqlImportResult {
       target: targetNodeId,
       label: relationType,
       type: "floating",
-      data: { relationType, sourceNodeId, targetNodeId, fkFieldName, ...presentActions(fk) },
+      data: {
+        relationType,
+        sourceNodeId,
+        targetNodeId,
+        fkFieldName,
+        ...(fkFieldId ? { fkFieldId } : {}),
+        ...presentActions(fk),
+      },
     });
     relationCount++;
   }

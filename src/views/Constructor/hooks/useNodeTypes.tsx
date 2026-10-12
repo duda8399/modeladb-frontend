@@ -24,6 +24,7 @@ export function useNodeTypes({ deleteNode, setNodeProp, resizeNode, onFieldsChan
         onFieldsChange={(fields: Field[]) => onFieldsChange(props.id, fields)}
         onIndexesChange={(indexes: TableIndex[]) => setNodeProp(props.id, "indexes", indexes)}
         onChecksChange={(checks: TableCheck[]) => setNodeProp(props.id, "checks", checks)}
+        onDescriptionChange={(description: string | null) => setNodeProp(props.id, "description", description)}
       />
     ),
     [deleteNode, setNodeProp, onFieldsChange],

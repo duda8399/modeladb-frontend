@@ -1,5 +1,4 @@
-import { Button, Modal, message } from "antd";
-import { ImportOutlined } from "@ant-design/icons";
+import { Modal, message } from "antd";
 import { useState } from "react";
 
 import type { Dispatch, SetStateAction } from "react";
@@ -7,7 +6,7 @@ import type { Dispatch, SetStateAction } from "react";
 import type { CustomEdge, CustomNode } from "../../types/diagramER";
 import { parseSqlToDiagram, SqlImportError } from "../../utils/sqlImport";
 
-interface ImportButtonProps {
+interface DiagramImportParams {
   diagramName: string;
   onDiagramNameChange: (name: string) => void;
   nodes: CustomNode[];
@@ -17,7 +16,7 @@ interface ImportButtonProps {
   onBeforeImportReplace: () => void;
 }
 
-export function ImportButton({
+export function useDiagramImport({
   diagramName,
   onDiagramNameChange,
   nodes,
@@ -25,7 +24,7 @@ export function ImportButton({
   setNodes,
   setEdges,
   onBeforeImportReplace,
-}: ImportButtonProps) {
+}: DiagramImportParams) {
   const [modal, modalContextHolder] = Modal.useModal();
   const [messageApi, messageContextHolder] = message.useMessage();
   const [importing, setImporting] = useState(false);
@@ -153,18 +152,14 @@ export function ImportButton({
     });
   };
 
-  return (
-    <>
-      {modalContextHolder}
-      {messageContextHolder}
-      <Button
-        title="Importar"
-        icon={<ImportOutlined />}
-        onClick={handleImportClick}
-        loading={importing}
-      >
-        Importar
-      </Button>
-    </>
-  );
+  return {
+    importing,
+    startImport: handleImportClick,
+    contextHolder: (
+      <>
+        {modalContextHolder}
+        {messageContextHolder}
+      </>
+    ),
+  };
 }

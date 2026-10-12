@@ -86,9 +86,12 @@ test.describe("Permissões e compartilhamento", () => {
 
     // Controles de edição bloqueados.
     await expect(viewerPage.getByRole("button", { name: "Salvar", exact: true })).toBeDisabled();
-    await expect(viewerPage.getByRole("button", { name: "Importar" })).toHaveCount(0);
+    await viewerPage.getByRole("button", { name: "Mais opções" }).click();
+    await expect(viewerPage.getByRole("menuitem", { name: "Importar" })).toHaveCount(0);
+    await viewerPage.keyboard.press("Escape");
 
-    await addEntity(viewerPage);
+    await expect(viewerPage.getByRole("button", { name: "Adicionar Entidade" })).toBeDisabled();
+    await expect(viewerPage.getByRole("button", { name: "Adicionar View" })).toBeDisabled();
     await expect(entityNodes(viewerPage)).toHaveCount(1);
     await expect(entityNodes(ownerPage)).toHaveCount(1);
 
@@ -157,7 +160,9 @@ test.describe("Permissões e compartilhamento", () => {
 
     await expect(editorPage.getByText("Sua permissão mudou para Leitor")).toBeVisible();
     await expect(editorPage.getByRole("button", { name: "Salvar", exact: true })).toBeDisabled();
-    await expect(editorPage.getByRole("button", { name: "Importar" })).toHaveCount(0);
+    await editorPage.getByRole("button", { name: "Mais opções" }).click();
+    await expect(editorPage.getByRole("menuitem", { name: "Importar" })).toHaveCount(0);
+    await editorPage.keyboard.press("Escape");
     assertNoErrors();
   });
 

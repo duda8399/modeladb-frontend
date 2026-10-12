@@ -33,6 +33,10 @@ const rawName = fc
 
 const sanitize = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9_]/g, "_");
 
+const freeText = fc
+  .array(fc.constantFrom(..."abcçãé XYZ'%_-.,0123"), { minLength: 0, maxLength: 10 })
+  .map((chars) => chars.join(""));
+
 const uniqueNames = (min: number, max: number) =>
   fc.uniqueArray(rawName, { minLength: min, maxLength: max, selector: (n) => sanitize(n).toLowerCase() });
 
@@ -55,15 +59,18 @@ export const diagramArb = (types: string[], keyableTypes: string[] = types) =>
         types: fc.array(fc.constantFrom(...types), { minLength: 6, maxLength: 6 }),
         notNull: fc.array(fc.boolean(), { minLength: 6, maxLength: 6 }),
         unique: fc.array(fc.boolean(), { minLength: 6, maxLength: 6 }),
+        values: fc.array(fc.array(freeText, { maxLength: 4 }), { minLength: 6, maxLength: 6 }),
+        descriptions: fc.array(freeText, { minLength: 6, maxLength: 6 }),
       }),
       { minLength: 6, maxLength: 6 },
     ),
+    tableDescriptions: fc.array(freeText, { minLength: 6, maxLength: 6 }),
     relations: fc.array(
       fc.record({ from: fc.nat(), to: fc.nat(), kind: fc.constantFrom("1:N", "1:1", "N:N") }),
       { maxLength: 5 },
     ),
   })
-  .map(({ tableNames, columns, relations }) => {
+  .map(({ tableNames, columns, tableDescriptions, relations }) => {
     const tables = tableNames.map((name, i) => {
       const spec = columns[i];
       const fields = [
@@ -73,9 +80,13 @@ export const diagramArb = (types: string[], keyableTypes: string[] = types) =>
           .map((n, j) => col(n, spec.types[j], {
             notNull: spec.notNull[j],
             unique: spec.unique[j] && keyableTypes.includes(spec.types[j]),
+            ...(spec.types[j] === "ENUM" || spec.types[j] === "SET" ? { values: spec.values[j] } : {}),
+            ...(spec.descriptions[j].trim() ? { description: spec.descriptions[j].trim() } : {}),
           })),
       ];
-      return table(name, fields);
+      const node = table(name, fields);
+      if (tableDescriptions[i].trim()) (node.data as { description?: string }).description = tableDescriptions[i].trim();
+      return node;
     });
 
     const nodes = [...tables];

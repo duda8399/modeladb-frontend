@@ -8,6 +8,7 @@ import {
   getDiagramViaApi,
   loggedInContext,
   openDiagram,
+  chooseMoreOption,
 } from "./support";
 
 const SCHEMA_SQL = `
@@ -33,7 +34,7 @@ const viewNodes = (page: Page) => page.locator(".react-flow__node-viewNode");
 const viewEdges = (page: Page) => page.locator(".react-flow__edge-viewEdge");
 
 async function importSql(page: Page, sql: string) {
-  await page.getByRole("button", { name: "Importar" }).click();
+  await chooseMoreOption(page, "Importar");
   const chooserPromise = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "Continuar" }).click();
   const chooser = await chooserPromise;
@@ -70,7 +71,7 @@ test("importa, edita e exporta índices e views", async ({ browser }) => {
   await modal.getByRole("button", { name: "Salvar" }).click();
   await expect(cliente.getByTestId("entity-indexes")).toContainText("idx_cliente_cidade_nome (cidade, nome)");
 
-  await page.getByText("Adicionar View", { exact: true }).click();
+  await page.getByRole("button", { name: "Adicionar View" }).click();
   await expect(viewNodes(page)).toHaveCount(2);
   const novaView = viewNodes(page).nth(1);
   await expect(novaView).toContainText("Sem consulta definida");

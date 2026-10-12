@@ -1,6 +1,6 @@
 # Compatibilidade do SQL exportado
 
-Gerado por `npm run test:sql-engines` em 2026-10-03T20:21:27.412Z (MySQL 8.4, PostgreSQL 16).
+Gerado por `npm run test:sql-engines` em 2026-10-12T16:47:10.423Z (MySQL 8.4, PostgreSQL 16).
 
 | Tipo | Simples MySQL | Simples PG | UNIQUE MySQL | UNIQUE PG | PK MySQL | PK PG |
 |---|---|---|---|---|---|---|
@@ -24,10 +24,10 @@ Gerado por `npm run test:sql-engines` em 2026-10-03T20:21:27.412Z (MySQL 8.4, Po
 | TEXT | ✅ | ✅ | ❌ | ✅ | ❌ | ✅ |
 | MEDIUMTEXT | ✅ | ✅ | ❌ | ✅ | ❌ | ✅ |
 | LONGTEXT | ✅ | ✅ | ❌ | ✅ | ❌ | ✅ |
-| ENUM | ❌ | ✅ | ❌ | ✅ | ❌ | ✅ |
-| SET | ❌ | ✅ | ❌ | ✅ | ❌ | ✅ |
+| ENUM | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| SET | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | BINARY | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| VARBINARY | ❌ | ✅ | ❌ | ✅ | ❌ | ✅ |
+| VARBINARY | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | TINYBLOB | ✅ | ✅ | ❌ | ✅ | ❌ | ✅ |
 | BLOB | ✅ | ✅ | ❌ | ✅ | ❌ | ✅ |
 | MEDIUMBLOB | ✅ | ✅ | ❌ | ✅ | ❌ | ✅ |

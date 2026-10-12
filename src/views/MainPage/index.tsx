@@ -3,6 +3,7 @@ import { Col, message, Row, Typography } from "antd";
 import { useNavigate } from "react-router-dom";
 import { ProjectCard } from "../../components/DashboardComponents/ProjectCard";
 import { DiagramCard } from "../../components/DashboardComponents/DiagramCard";
+import type { DiagramSummary } from "../../services/diagramsService";
 import { DocumentsLoading } from "../../components/DashboardComponents/DocumentsLoading";
 import { AppLayout } from "../../components/LayoutComponents/AppLayout";
 import { DatabaseOutlined, RobotOutlined } from "@ant-design/icons";
@@ -178,6 +179,10 @@ const MainPage: React.FC = () => {
                   document={project}
                   isDeleting={deletingId === project.id}
                   onDelete={handleDelete}
+                  onRenamed={(renamed: DiagramSummary) =>
+                    setRecent((prev) => prev.map((item) => (item.id === renamed.id ? { ...item, name: renamed.name } : item)))
+                  }
+                  onDuplicated={(copy: DiagramSummary) => setRecent((prev) => [copy, ...prev])}
                 />
               </Col>
             ))}

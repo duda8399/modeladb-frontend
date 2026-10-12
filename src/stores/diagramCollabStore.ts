@@ -26,6 +26,7 @@ export interface CollabEdgeData {
   targetNodeId?: string;
   junctionId?: string;
   fkFieldName?: string;
+  fkFieldId?: string;
   onDelete?: FkAction | null;
   onUpdate?: FkAction | null;
   deleted?: boolean;

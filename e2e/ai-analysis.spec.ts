@@ -9,6 +9,7 @@ import {
   openDiagram,
   shareViaApi,
   type User,
+  chooseMoreOption,
 } from "./support";
 
 const SQL = `
@@ -53,7 +54,7 @@ async function saveOpenAIKey(user: User) {
 }
 
 async function importSql(page: Page, sql: string) {
-  await page.getByRole("button", { name: "Importar" }).click();
+  await chooseMoreOption(page, "Importar");
   const chooserPromise = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "Continuar" }).click();
   const chooser = await chooserPromise;

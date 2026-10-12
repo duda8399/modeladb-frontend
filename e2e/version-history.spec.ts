@@ -7,12 +7,13 @@ import {
   loggedInContext,
   openDiagram,
   shareViaApi,
+  chooseMoreOption,
 } from "./support";
 
 const SQL = "CREATE TABLE cliente (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, nome VARCHAR(80));";
 
 async function importSql(page: Page, sql: string) {
-  await page.getByRole("button", { name: "Importar" }).click();
+  await chooseMoreOption(page, "Importar");
   const chooserPromise = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "Continuar" }).click();
   const chooser = await chooserPromise;
@@ -42,7 +43,7 @@ test("salva, compara e restaura versões, avisando os colaboradores", async ({ b
   await expect(entityNodes(page)).toHaveCount(1);
   await waitSaved(page);
 
-  await page.getByRole("button", { name: "Histórico" }).click();
+  await chooseMoreOption(page, "Histórico");
   await expect(items(page)).toHaveCount(1);
   await expect(items(page).first()).toContainText("Salvamento automático");
   await expect(items(page).first()).toContainText("1 tabela · 0 relacionamentos");
@@ -54,7 +55,7 @@ test("salva, compara e restaura versões, avisando os colaboradores", async ({ b
   await expect(items(page).first()).toContainText("Entrega 1");
   await drawer(page).locator(".ant-drawer-close").click();
 
-  await page.getByText("Adicionar Entidade", { exact: true }).click();
+  await page.getByRole("button", { name: "Adicionar Entidade" }).click();
   await expect(entityNodes(page)).toHaveCount(2);
   await waitSaved(page);
 
@@ -62,7 +63,7 @@ test("salva, compara e restaura versões, avisando os colaboradores", async ({ b
   await openDiagram(editorPage, diagramId);
   await expect(entityNodes(editorPage)).toHaveCount(2);
 
-  await page.getByRole("button", { name: "Histórico" }).click();
+  await chooseMoreOption(page, "Histórico");
   const entrega = items(page).filter({ hasText: "Entrega 1" });
   await entrega.getByRole("button", { name: "Visualizar" }).click();
   const preview = page.locator(".ant-modal").filter({ hasText: "Mudanças feitas desde esta versão" });
@@ -90,7 +91,7 @@ test("salva, compara e restaura versões, avisando os colaboradores", async ({ b
 
   const viewerPage = await (await loggedInContext(browser, viewer)).newPage();
   await openDiagram(viewerPage, diagramId);
-  await viewerPage.getByRole("button", { name: "Histórico" }).click();
+  await chooseMoreOption(viewerPage, "Histórico");
   await expect(items(viewerPage)).toHaveCount(3);
   await expect(drawer(viewerPage).getByRole("button", { name: "Salvar versão" })).toHaveCount(0);
   await expect(drawer(viewerPage).getByRole("button", { name: "Restaurar" })).toHaveCount(0);

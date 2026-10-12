@@ -93,7 +93,7 @@ export function entityNameInput(page: Page, index = 0) {
 }
 
 export async function addEntity(page: Page) {
-  await page.getByText("Adicionar Entidade", { exact: true }).click();
+  await page.getByRole("button", { name: "Adicionar Entidade" }).click();
 }
 
 export async function renameEntity(page: Page, index: number, name: string) {
@@ -105,4 +105,9 @@ export async function renameEntity(page: Page, index: number, name: string) {
 
 export function avatar(page: Page, email: string) {
   return page.locator(`[title="${email}"]`);
+}
+
+export async function chooseMoreOption(page: Page, option: "Importar" | "Exportar" | "Histórico") {
+  await page.getByRole("button", { name: "Mais opções" }).click();
+  await page.getByRole("menuitem", { name: option }).click();
 }

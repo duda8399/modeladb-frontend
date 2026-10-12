@@ -64,6 +64,7 @@ export function buildRelationshipOps(
 
   const edgeId = newId();
   const fkName = `fk_${sourceName}_id`;
+  const fkFieldId = newId();
 
   const edge = {
     id: edgeId,
@@ -73,7 +74,7 @@ export function buildRelationshipOps(
     targetHandle: target.handle ?? undefined,
     label: relationType,
     type: "floating",
-    data: { relationType, sourceNodeId, targetNodeId, fkFieldName: fkName },
+    data: { relationType, sourceNodeId, targetNodeId, fkFieldName: fkName, fkFieldId },
   };
 
   const visibleFieldCount = (target.node?.data.fields ?? []).length;
@@ -83,7 +84,7 @@ export function buildRelationshipOps(
     {
       type: "ADD_FIELD",
       targetId: targetNodeId,
-      payload: fkField(newId(), fkName, visibleFieldCount, false),
+      payload: fkField(fkFieldId, fkName, visibleFieldCount, false),
     },
   ];
 }

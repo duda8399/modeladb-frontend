@@ -14,6 +14,7 @@ import {
   FolderOutlined,
   ShareAltOutlined,
 } from "@ant-design/icons";
+import { InvitationsBell } from "./InvitationsBell";
 import { useNavigate } from "react-router-dom";
 import LogoFull from "../../assets/logo2.png";
 import { logout } from "../../services/auth.service";
@@ -134,15 +135,18 @@ export function Navbar() {
         />
       </div>
 
-      <Dropdown
-        menu={{ items: profileMenuItems, onClick: handleMenuClick }}
-        trigger={["click"]}
-        placement="bottomRight"
-      >
-        <Button type="text" style={{ color: "#fff", flexShrink: 0 }}>
-          <Avatar size={36} src={avatarUrl} icon={<UserOutlined />} />
-        </Button>
-      </Dropdown>
+      <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+        <InvitationsBell />
+        <Dropdown
+          menu={{ items: profileMenuItems, onClick: handleMenuClick }}
+          trigger={["click"]}
+          placement="bottomRight"
+        >
+          <Button type="text" style={{ color: "#fff", flexShrink: 0 }}>
+            <Avatar size={36} src={avatarUrl} icon={<UserOutlined />} />
+          </Button>
+        </Dropdown>
+      </div>
     </Header>
   );
 }

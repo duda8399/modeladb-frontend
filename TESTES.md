@@ -63,9 +63,11 @@ falham. Quando o problema for corrigido, o Vitest acusa e o `.fails` deve sair.
 
 | Teste | Problema |
 |---|---|
-| MySQL: ENUM / SET / VARBINARY | Exportados sem a lista de valores ou o tamanho obrigatórios |
 | MySQL: UNIQUE numa coluna TEXT | TEXT, BLOB, JSON e tipos espaciais não podem ser chave sem ajustes |
 | PostgreSQL: UNIQUE numa coluna POINT | `point` não tem índice B-tree |
 | MySQL: AUTO_INCREMENT fora de chave ou em VARCHAR | A interface permite, o MySQL recusa |
-| duas entidades com o mesmo nome | Gera dois `CREATE TABLE` iguais |
-| renomear a coluna FK depois de criar o relacionamento | A aresta guarda o nome antigo e o `ALTER TABLE` aponta para uma coluna inexistente |
+
+Corrigidas em 2026-10-12 e hoje cobertas por testes normais: ENUM/SET exportados
+sem a lista de valores, VARBINARY sem tamanho, duas entidades com o mesmo nome
+(a cópia recebe sufixo `_2`) e coluna FK renomeada depois do relacionamento (a
+aresta guarda o id da coluna).

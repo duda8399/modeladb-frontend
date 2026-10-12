@@ -9,6 +9,7 @@ import {
   type OperationDraft,
 } from "../../../stores/diagramCollabStore";
 import { diffFields, visibleFields } from "../../../utils/fieldOps";
+import { resolveDirectFkLinks, type FkEdgeLike, type FkNodeLike } from "../../../utils/foreignKeys";
 import type { RelationshipChanges } from "../../../components/ConstructorComponents/RelationshipModal";
 
 type Params = {
@@ -18,6 +19,14 @@ type Params = {
   setNodes: Dispatch<SetStateAction<CustomNode[]>>;
   setEdges: Dispatch<SetStateAction<CustomEdge[]>>;
 };
+
+function currentDirectLinks() {
+  const state = useDiagramCollabStore.getState();
+  return resolveDirectFkLinks(
+    selectVisibleNodes(state) as unknown as FkNodeLike[],
+    selectVisibleEdges(state) as unknown as FkEdgeLike[],
+  );
+}
 
 export function useDiagramOperations({ userId, readOnly, emitOperation, setNodes, setEdges }: Params) {
   const syncFromStore = useCallback(() => {
@@ -102,20 +111,10 @@ export function useDiagramOperations({ userId, readOnly, emitOperation, setNodes
       }
 
       if (edge.data?.relationType === "1:1" || edge.data?.relationType === "1:N") {
-        const targetNode = store.getNode(edge.data?.targetNodeId ?? edge.target);
-        const sourceNodeId = edge.data?.sourceNodeId ?? edge.source;
-        const sourceName = store.getNode(sourceNodeId)?.data.name || sourceNodeId;
-        const fkFieldName = edge.data?.fkFieldName;
+        const link = currentDirectLinks().get(edgeId);
 
-        const fkField = (targetNode?.data.fields || []).find(
-          (f) =>
-            !f.deleted &&
-            f.fk &&
-            (fkFieldName ? f.name === fkFieldName : f.name === `fk_${sourceName}_id`),
-        );
-
-        if (fkField && targetNode) {
-          sendOp({ type: "REMOVE_FIELD", targetId: targetNode.id, payload: { fieldId: fkField.id } });
+        if (link?.field?.fk) {
+          sendOp({ type: "REMOVE_FIELD", targetId: link.childId, payload: { fieldId: link.field.id } });
         }
       }
 
@@ -173,7 +172,36 @@ export function useDiagramOperations({ userId, readOnly, emitOperation, setNodes
       const node = useDiagramCollabStore.getState().getNode(nodeId);
       if (!node) return;
 
-      diffFields(nodeId, node.data.fields, newFields).forEach(sendOp);
+      const linksBefore = currentDirectLinks();
+      const fieldOps = diffFields(nodeId, node.data.fields, newFields);
+      fieldOps.forEach(sendOp);
+
+      fieldOps
+        .filter((op) => op.type === "SET_FIELD_PROP" && op.payload?.key === "name")
+        .forEach((op) => {
+          for (const link of linksBefore.values()) {
+            if (link.childId !== nodeId || link.field?.id !== op.payload.fieldId) continue;
+            const edge = useDiagramCollabStore.getState().getEdge(link.edgeId);
+            if (!edge?.data) continue;
+
+            if (op.payload.value && edge.data.fkFieldName !== op.payload.value) {
+              sendOp({
+                type: "SET_EDGE_PROP",
+                targetId: edge.id,
+                payload: { key: "fkFieldName", value: op.payload.value },
+                previousValue: edge.data.fkFieldName,
+              });
+            }
+            if (!edge.data.fkFieldId) {
+              sendOp({
+                type: "SET_EDGE_PROP",
+                targetId: edge.id,
+                payload: { key: "fkFieldId", value: op.payload.fieldId },
+                previousValue: undefined,
+              });
+            }
+          }
+        });
     },
     [sendOp],
   );
@@ -224,9 +252,8 @@ export function useDiagramOperations({ userId, readOnly, emitOperation, setNodes
 
     const childNode = state.getNode(data.targetNodeId ?? edge.target);
     const parentNode = state.getNode(data.sourceNodeId ?? edge.source);
-    const fkField = (childNode?.data.fields ?? []).find(
-      (f) => !f.deleted && f.name === data.fkFieldName,
-    );
+    const linkedId = currentDirectLinks().get(edge.id)?.field?.id;
+    const fkField = (childNode?.data.fields ?? []).find((f) => !f.deleted && f.id === linkedId);
     return { childNode, parentNode, fkField };
   }, []);
 

@@ -11,6 +11,8 @@ import { EditOutlined } from "@ant-design/icons";
 import { getEdgeParams } from "./floatingEdgeUtils";
 import { useEdgeActions } from "./EdgeActionsContext";
 import trash from "../../assets/trash.svg";
+import { matchDirectFkField } from "../../utils/foreignKeys";
+import type { Field } from "../../types/diagramER";
 
 // Tempo que a lixeira continua visivel depois que o mouse sai da aresta, para
 // dar tempo de leva-lo ate o botao.
@@ -79,10 +81,12 @@ export default function FloatingEdge({
   const showTrash = active && !readOnly;
 
   const fkField =
-    data?.fkFieldName && !data?.junctionId
-      ? ((targetNode.data?.fields ?? []) as { name: string | null; notNull: boolean; pk: boolean }[]).find(
-          (field) => field.name === data.fkFieldName,
-        )
+    data && !data.junctionId
+      ? matchDirectFkField(
+          data,
+          (targetNode.data?.fields ?? []) as Field[],
+          (sourceNode.data?.name as string | undefined) ?? sourceNode.id,
+        )?.field
       : undefined;
   const optional = !!fkField && !fkField.notNull && !fkField.pk;
   const summary = [

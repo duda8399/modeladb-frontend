@@ -178,14 +178,15 @@ describe("chaves estrangeiras", () => {
     ]);
   });
 
-  it("referencia a coluna id quando a tabela de origem não tem PK", () => {
+  it("omite a FK quando a tabela de origem não tem PK, em vez de referenciar uma coluna inexistente", () => {
     const origem = table("origem", [col("nome", "TEXT")]);
     const destino = table("destino", [pk()]);
     const edge = oneToMany(origem, destino);
 
     const { foreignKeyStatements } = generateSqlBlocks([origem, destino], [edge], "postgres");
 
-    expect(foreignKeyStatements[0]).toContain('REFERENCES "origem"("id")');
+    expect(foreignKeyStatements).toEqual([]);
+    expect(() => runOnPgMem([origem, destino], [edge])).not.toThrow();
   });
 
   it("N:N gera exatamente duas FKs na tabela associativa, mesmo com duas arestas", () => {
@@ -452,14 +453,9 @@ describe("propriedade: qualquer diagrama com nomes distintos gera SQL válido", 
     );
   });
 
-  it("o DDL MySQL sempre é aceito pela gramática do MySQL (exceto ENUM/SET, ver abaixo)", () => {
+  it("o DDL MySQL sempre é aceito pela gramática do MySQL", () => {
     fc.assert(
       fc.property(diagramArb(PG_MEM_TYPES), ({ nodes, edges }) => {
-        for (const n of nodes) {
-          for (const f of (n.data as { fields: { type: string | null }[] }).fields) {
-            if (f.type === "ENUM" || f.type === "SET") f.type = "TEXT";
-          }
-        }
         parseAll(nodes, edges, "mysql");
       }),
       { numRuns: 200 },
@@ -467,27 +463,146 @@ describe("propriedade: qualquer diagrama com nomes distintos gera SQL válido", 
   });
 });
 
-/**
- * Limitações conhecidas, documentadas com `it.fails`: o teste descreve o
- * comportamento desejado e hoje falha. Quando a limitação for resolvida, o
- * Vitest acusa e o `.fails` deve ser removido.
- */
-describe("limitações conhecidas", () => {
-  it.fails.each(["ENUM", "SET"])("MySQL: o tipo %s é exportado sem a lista de valores obrigatória", (type) => {
-    parseAll([table("t", [pk(), col("c", type)])], [], "mysql");
+describe("defeitos corrigidos (antes registrados como limitações)", () => {
+  it.each(["ENUM", "SET"])("MySQL: %s sem valores cai para VARCHAR e o script continua válido", (type) => {
+    const nodes = [table("t", [pk(), col("c", type)])];
+    expect(generateSqlScript(nodes, [], "mysql").sql).toContain("`c` VARCHAR(255)");
+    parseAll(nodes, [], "mysql");
   });
 
-  it.fails("duas entidades com o mesmo nome geram um script que não executa", () => {
-    runOnPgMem([table("Cliente", [pk()]), table("Cliente", [pk()])], []);
+  it("duas entidades com o mesmo nome geram tabelas com nomes distintos", () => {
+    const a = table("Cliente", [pk()]);
+    const b = table("cliente", [pk()]);
+    const { blocks } = generateSqlBlocks([a, b], [], "postgres");
+
+    expect(blocks.map((block) => block.title)).toEqual(["Cliente", "cliente_2"]);
+    expect(() => runOnPgMem([a, b], [])).not.toThrow();
   });
 
-  it.fails("renomear a coluna FK depois de criar o relacionamento quebra o ALTER TABLE", () => {
+  it("a FK aponta para a tabela certa quando há nomes repetidos", () => {
+    const primeiro = table("Cliente", [pk()]);
+    const segundo = table("Cliente", [pk()]);
+    const pedido = table("pedido", [pk()]);
+    const edge = oneToMany(segundo, pedido);
+
+    const { foreignKeyStatements } = generateSqlBlocks([primeiro, segundo, pedido], [edge], "postgres");
+
+    expect(foreignKeyStatements).toEqual([
+      'ALTER TABLE "pedido" ADD CONSTRAINT "fk_pedido_fk_Cliente_id" FOREIGN KEY ("fk_Cliente_id") REFERENCES "Cliente_2"("id");',
+    ]);
+    expect(() => runOnPgMem([primeiro, segundo, pedido], [edge])).not.toThrow();
+  });
+
+  it("colunas repetidas na mesma tabela recebem sufixo", () => {
+    const t = table("t", [pk(), col("nome", "TEXT"), col("Nome", "TEXT")]);
+    expect(generateSqlBlocks([t], [], "postgres").blocks[0].sql).toContain('"Nome_2" TEXT');
+    expect(() => runOnPgMem([t], [])).not.toThrow();
+  });
+
+  it("renomear a coluna FK depois de criar o relacionamento mantém o ALTER TABLE válido", () => {
     const cliente = table("cliente", [pk()]);
     const pedido = table("pedido", [pk()]);
     const edge = oneToMany(cliente, pedido);
     const fields = (pedido.data as { fields: { name: string | null; fk: boolean }[] }).fields;
     fields.find((f) => f.fk)!.name = "cliente_id";
 
+    const { foreignKeyStatements } = generateSqlBlocks([cliente, pedido], [edge], "postgres");
+    expect(foreignKeyStatements[0]).toContain('FOREIGN KEY ("cliente_id")');
     runOnPgMem([cliente, pedido], [edge]);
+  });
+
+  it("a coluna FK é encontrada pelo id mesmo quando outra coluna ficou com o nome antigo", () => {
+    const cliente = table("cliente", [pk()]);
+    const pedido = table("pedido", [pk()]);
+    const edge = oneToMany(cliente, pedido);
+    const fields = (pedido.data as { fields: Field[] }).fields;
+    const fkField = fields.find((f) => f.fk)!;
+    edge.data!.fkFieldId = fkField.id;
+    fkField.name = "comprador_id";
+    fields.push(col("fk_cliente_id", "INT"));
+
+    const { foreignKeyStatements } = generateSqlBlocks([cliente, pedido], [edge], "postgres");
+    expect(foreignKeyStatements[0]).toContain('FOREIGN KEY ("comprador_id")');
+  });
+
+  it("não emite ALTER TABLE quando a coluna FK foi apagada", () => {
+    const cliente = table("cliente", [pk()]);
+    const pedido = table("pedido", [pk()]);
+    const edge = oneToMany(cliente, pedido);
+    const data = pedido.data as { fields: Field[] };
+    data.fields = data.fields.filter((f) => !f.fk);
+
+    expect(generateSqlBlocks([cliente, pedido], [edge], "postgres").foreignKeyStatements).toEqual([]);
+    expect(() => runOnPgMem([cliente, pedido], [edge])).not.toThrow();
+  });
+});
+
+describe("ENUM e SET com lista de valores", () => {
+  const status = () =>
+    table("pedido", [
+      pk(),
+      col("status", "ENUM", { values: ["aberto", "pago", "d'Ávila", " pago ", ""], notNull: true }),
+      col("tags", "SET", { values: ["a", "b"] }),
+    ]);
+
+  it("MySQL recebe a lista de valores escapada e sem duplicatas", () => {
+    const sql = generateSqlBlocks([status()], [], "mysql").blocks[0].sql;
+    expect(sql).toContain("`status` ENUM('aberto', 'pago', 'd''Ávila') NOT NULL");
+    expect(sql).toContain("`tags` SET('a', 'b')");
+    parseAll([status()], [], "mysql");
+  });
+
+  it("PostgreSQL usa TEXT com CHECK para ENUM e o banco recusa valores fora da lista", () => {
+    const sql = generateSqlBlocks([status()], [], "postgres").blocks[0].sql;
+    expect(sql).toContain(`"status" TEXT NOT NULL CHECK ("status" IN ('aberto', 'pago', 'd''Ávila'))`);
+    expect(sql).toContain('"tags" TEXT');
+
+    const db = runOnPgMem([status()], []);
+    db.public.none(`INSERT INTO "pedido" ("status") VALUES ('pago')`);
+    expect(() => db.public.none(`INSERT INTO "pedido" ("status") VALUES ('cancelado')`)).toThrow();
+  });
+
+  it("descarta valores que o MySQL considera iguais e tira vírgulas de SET", () => {
+    const t = table("t", [
+      pk(),
+      col("e", "ENUM", { values: ["a,b", "Ação", "acao", "ç", "c"] }),
+      col("s", "SET", { values: ["a,b", "ab", ","] }),
+    ]);
+    const sql = generateSqlBlocks([t], [], "mysql").blocks[0].sql;
+    expect(sql).toContain("`e` ENUM('a,b', 'Ação', 'ç')");
+    expect(sql).toContain("`s` SET('ab')");
+  });
+
+  it("MySQL escapa barra invertida nos valores", () => {
+    const t = table("t", [pk(), col("c", "ENUM", { values: ["a\\b"] })]);
+    expect(generateSqlBlocks([t], [], "mysql").blocks[0].sql).toContain("ENUM('a\\\\b')");
+  });
+});
+
+describe("descrições exportadas como COMMENT", () => {
+  const documentado = () => {
+    const t = table("cliente", [
+      pk(),
+      col("nome", "VARCHAR", { description: "Nome completo do cliente" }),
+      col("apelido", "TEXT", { description: "   " }),
+    ]);
+    (t.data as { description?: string }).description = "Pessoas que compram na loja d'Ávila";
+    return t;
+  };
+
+  it("MySQL usa COMMENT na coluna e COMMENT= na tabela", () => {
+    const sql = generateSqlBlocks([documentado()], [], "mysql").blocks[0].sql;
+    expect(sql).toContain("`nome` VARCHAR(255) COMMENT 'Nome completo do cliente'");
+    expect(sql).toContain(") COMMENT='Pessoas que compram na loja d''Ávila';");
+    expect(sql).not.toContain("`apelido` TEXT COMMENT");
+    parseAll([documentado()], [], "mysql");
+  });
+
+  it("PostgreSQL usa COMMENT ON TABLE e COMMENT ON COLUMN", () => {
+    const sql = generateSqlBlocks([documentado()], [], "postgres").blocks[0].sql;
+    expect(sql).toContain(`COMMENT ON TABLE "cliente" IS 'Pessoas que compram na loja d''Ávila';`);
+    expect(sql).toContain(`COMMENT ON COLUMN "cliente"."nome" IS 'Nome completo do cliente';`);
+    expect(sql).not.toContain('"apelido" IS');
+    expect(() => runOnPgMem([documentado()], [])).not.toThrow();
   });
 });

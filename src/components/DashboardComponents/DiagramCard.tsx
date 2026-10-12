@@ -2,14 +2,21 @@ import { LogOut } from "lucide-react";
 import {
   ApartmentOutlined,
   ClockCircleOutlined,
+  CopyOutlined,
   DeleteOutlined,
   EditOutlined,
+  FormOutlined,
+  MoreOutlined,
   ShareAltOutlined,
   UserOutlined,
 } from "@ant-design/icons";
 import {
   Button,
   Card,
+  Dropdown,
+  Input,
+  Modal,
+  message,
   Popconfirm,
   Tooltip,
   Tag,
@@ -20,6 +27,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ShareModal from "../ConstructorComponents/ShareModal";
 import { getCurrentUser } from "../../utils/auth";
+import { diagramsService, type DiagramSummary } from "../../services/diagramsService";
 
 const { Text } = Typography;
 
@@ -43,6 +51,8 @@ interface DiagramCardProps {
   // Sair de um diagrama compartilhado (remove o proprio acesso).
   onLeave?: (id: string) => void;
   isLeaving?: boolean;
+  onRenamed?: (diagram: DiagramSummary) => void;
+  onDuplicated?: (diagram: DiagramSummary) => void;
 }
 
 export function DiagramCard({
@@ -55,9 +65,70 @@ export function DiagramCard({
   isShared = false,
   onLeave,
   isLeaving = false,
+  onRenamed,
+  onDuplicated,
 }: DiagramCardProps) {
   const navigate = useNavigate();
   const [shareOpen, setShareOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState(document.name);
+  const [renaming, setRenaming] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
+  const [messageApi, contextHolder] = message.useMessage();
+  const canRename = !isShared || roleLabel === "Editor";
+  const trimmedName = renameValue.trim();
+
+  const serverMessage = (error: unknown) =>
+    (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+
+  const submitRename = async () => {
+    if (!trimmedName || trimmedName === document.name) {
+      setRenameOpen(false);
+      return;
+    }
+    try {
+      setRenaming(true);
+      const renamed = await diagramsService.rename(document.id, trimmedName);
+      onRenamed?.(renamed);
+      setRenameOpen(false);
+      messageApi.success("Diagrama renomeado.");
+    } catch (error) {
+      messageApi.error(serverMessage(error) || "Não foi possível renomear o diagrama.");
+    } finally {
+      setRenaming(false);
+    }
+  };
+
+  const duplicate = async () => {
+    try {
+      setDuplicating(true);
+      const copy = await diagramsService.duplicate(document.id);
+      onDuplicated?.(copy);
+      messageApi.success(
+        isShared ? `"${copy.name}" foi criado em Meus documentos.` : `"${copy.name}" foi criado.`,
+      );
+    } catch (error) {
+      messageApi.error(serverMessage(error) || "Não foi possível duplicar o diagrama.");
+    } finally {
+      setDuplicating(false);
+    }
+  };
+
+  const moreItems = [
+    { key: "duplicate", icon: <CopyOutlined />, label: "Duplicar", disabled: duplicating },
+    ...(canRename ? [{ key: "rename", icon: <FormOutlined />, label: "Renomear" }] : []),
+    ...(!isShared ? [{ key: "share", icon: <ShareAltOutlined />, label: "Compartilhar" }] : []),
+  ];
+
+  const handleMoreClick = ({ key, domEvent }: { key: string; domEvent: React.SyntheticEvent }) => {
+    domEvent.stopPropagation();
+    if (key === "rename") {
+      setRenameValue(document.name);
+      setRenameOpen(true);
+    }
+    if (key === "duplicate") void duplicate();
+    if (key === "share") setShareOpen(true);
+  };
   const {
     token: { colorPrimary },
   } = theme.useToken();
@@ -65,13 +136,6 @@ export function DiagramCard({
   const handleClick = () => {
     navigate(`/model/${document.id}`);
     onClick?.();
-  };
-
-  // Atalho para a mesma janela de compartilhamento do editor (convidar
-  // colaboradores e gerenciar papeis), sem precisar abrir o diagrama.
-  const handleShare = (e: React.MouseEvent<HTMLElement>) => {
-    e.stopPropagation();
-    setShareOpen(true);
   };
 
   const formattedUpdatedAt = new Date(document.updatedAt).toLocaleString(
@@ -87,6 +151,7 @@ export function DiagramCard({
 
   return (
     <>
+      {contextHolder}
       <Card
         hoverable
         onClick={handleClick}
@@ -160,41 +225,30 @@ export function DiagramCard({
               onClick={handleClick}
             />
             {!isShared && (
-              <>
-                <Popconfirm
-                  title="Excluir documento"
-                  description="Tem certeza que deseja excluir este documento?"
-                  okText="Excluir"
-                  cancelText="Cancelar"
-                  okButtonProps={{ loading: isDeleting, disabled: isDeleting }}
-                  cancelButtonProps={{ disabled: isDeleting }}
+              <Popconfirm
+                title="Excluir documento"
+                description="Tem certeza que deseja excluir este documento?"
+                okText="Excluir"
+                cancelText="Cancelar"
+                okButtonProps={{ loading: isDeleting, disabled: isDeleting }}
+                cancelButtonProps={{ disabled: isDeleting }}
+                disabled={isDeleting}
+                onCancel={(e) => e?.stopPropagation()}
+                onConfirm={(e) => {
+                  e?.stopPropagation();
+                  onDelete?.(document.id);
+                }}
+              >
+                <Button
+                  danger
+                  type="text"
+                  size="small"
+                  loading={isDeleting}
                   disabled={isDeleting}
-                  onCancel={(e) => e?.stopPropagation()}
-                  onConfirm={(e) => {
-                    e?.stopPropagation();
-                    onDelete?.(document.id);
-                  }}
-                >
-                  <Button
-                    danger
-                    type="text"
-                    size="small"
-                    loading={isDeleting}
-                    disabled={isDeleting}
-                    icon={<DeleteOutlined />}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                </Popconfirm>
-                <Tooltip title="Compartilhar">
-                  <Button
-                    type="text"
-                    size="small"
-                    aria-label="Compartilhar"
-                    icon={<ShareAltOutlined />}
-                    onClick={handleShare}
-                  />
-                </Tooltip>
-              </>
+                  icon={<DeleteOutlined />}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </Popconfirm>
             )}
             {isShared && onLeave && (
               <Popconfirm
@@ -235,6 +289,16 @@ export function DiagramCard({
                 </Tooltip>
               </Popconfirm>
             )}
+            <Dropdown menu={{ items: moreItems, onClick: handleMoreClick }} trigger={["click"]}>
+              <Button
+                type="text"
+                size="small"
+                aria-label="Mais ações"
+                loading={duplicating}
+                icon={<MoreOutlined />}
+                onClick={(e) => e.stopPropagation()}
+              />
+            </Dropdown>
           </div>
         </div>
 
@@ -294,6 +358,28 @@ export function DiagramCard({
           </div>
         </div>
       </Card>
+
+      <Modal
+        title="Renomear diagrama"
+        open={renameOpen}
+        okText="Renomear"
+        cancelText="Cancelar"
+        confirmLoading={renaming}
+        okButtonProps={{ disabled: !trimmedName }}
+        onOk={submitRename}
+        onCancel={() => setRenameOpen(false)}
+        destroyOnHidden
+      >
+        <Input
+          autoFocus
+          aria-label="Novo nome"
+          value={renameValue}
+          maxLength={120}
+          status={trimmedName ? undefined : "error"}
+          onChange={(e) => setRenameValue(e.target.value)}
+          onPressEnter={submitRename}
+        />
+      </Modal>
 
       {/* Fora do Card: eventos de clique dentro do modal (portal) nao podem
         borbulhar ate o onClick do Card, que abriria o diagrama. */}

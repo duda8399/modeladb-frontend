@@ -6,7 +6,8 @@ import type {
   TableCheck,
   TableIndex,
 } from "../types/diagramER";
-import { isValidSize, normalizeSize } from "./sqlTypes";
+import { isValidSize, isValueListType, normalizeSize, normalizeValues } from "./sqlTypes";
+import { resolveDirectFkLinks, resolveJunctionFkLinks } from "./foreignKeys";
 
 export type SqlDialect = "mysql" | "postgres";
 
@@ -80,10 +81,20 @@ function validSize(field: Field): string | null {
   return size && isValidSize(field.type, size) ? size : null;
 }
 
-function formatMySqlType(type: string, size: string | null = null): string {
+function sqlString(value: string, dialect: SqlDialect): string {
+  const escaped = dialect === "mysql" ? value.replace(/\\/g, "\\\\") : value;
+  return `'${escaped.replace(/'/g, "''")}'`;
+}
+
+function formatMySqlType(type: string, size: string | null = null, values: string[] = []): string {
   const upperType = type.toUpperCase();
+  if (isValueListType(upperType)) {
+    return values.length
+      ? `${upperType}(${values.map((value) => sqlString(value, "mysql")).join(", ")})`
+      : "VARCHAR(255)";
+  }
   if (size) return `${upperType}(${size})`;
-  if (upperType === "VARCHAR") return "VARCHAR(255)";
+  if (upperType === "VARCHAR" || upperType === "VARBINARY") return `${upperType}(255)`;
   if (upperType === "CHAR") return "CHAR(1)";
   return upperType;
 }
@@ -105,14 +116,20 @@ function formatPostgresType(type: string, ai: boolean, size: string | null = nul
   return PG_TYPE_MAP[upperType] || upperType;
 }
 
-function buildColumnLine(field: Field, dialect: SqlDialect): string {
+function descriptionOf(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function buildColumnLine(field: Field, columnName: string, dialect: SqlDialect): string {
   const size = validSize(field);
+  const values = isValueListType(field.type) ? normalizeValues(field.values, field.type) : [];
   const typeSql =
     dialect === "mysql"
-      ? formatMySqlType(field.type as string, size)
+      ? formatMySqlType(field.type as string, size, values)
       : formatPostgresType(field.type as string, field.ai, size);
 
-  const parts = [quote(field.name as string, dialect), typeSql];
+  const column = quote(columnName, dialect);
+  const parts = [column, typeSql];
 
   const defaultValue = field.defaultValue?.trim();
   if (defaultValue && !field.ai) parts.push(`DEFAULT ${defaultValue}`);
@@ -120,6 +137,13 @@ function buildColumnLine(field: Field, dialect: SqlDialect): string {
   if (field.notNull || field.pk) parts.push("NOT NULL");
   if (field.unique && !field.pk) parts.push("UNIQUE");
   if (dialect === "mysql" && field.ai) parts.push("AUTO_INCREMENT");
+
+  if (dialect === "postgres" && field.type?.toUpperCase() === "ENUM" && values.length) {
+    parts.push(`CHECK (${column} IN (${values.map((value) => sqlString(value, dialect)).join(", ")}))`);
+  }
+
+  const description = descriptionOf(field.description);
+  if (dialect === "mysql" && description) parts.push(`COMMENT ${sqlString(description, dialect)}`);
 
   return parts.join(" ");
 }
@@ -133,32 +157,85 @@ function getTableName(node: CustomNode): string {
   return (node.data as any)?.name || "tabela_sem_nome";
 }
 
-function findPkColumn(node?: CustomNode): string {
-  if (!node) return "id";
-  const fields = getValidFields(node);
-  return fields.find((field) => field.pk)?.name || "id";
+type TableModel = {
+  node: CustomNode;
+  name: string;
+  fields: Field[];
+  columnNames: Map<string, string>;
+};
+
+function uniqueName(base: string, used: Set<string>, fallback: string): string {
+  const root = sanitizeIdentifier(base, fallback);
+  let candidate = root;
+  let suffix = 2;
+  while (used.has(candidate.toLowerCase())) candidate = `${root}_${suffix++}`;
+  used.add(candidate.toLowerCase());
+  return candidate;
 }
 
-function buildCreateTable(node: CustomNode, dialect: SqlDialect): string | null {
-  const fields = getValidFields(node);
+function buildTableModels(entityNodes: CustomNode[]): Map<string, TableModel> {
+  const usedTables = new Set<string>();
+  const models = new Map<string, TableModel>();
+
+  for (const node of entityNodes) {
+    const fields = getValidFields(node);
+    const usedColumns = new Set<string>();
+    const columnNames = new Map(
+      fields.map((field) => [field.id, uniqueName(field.name as string, usedColumns, "coluna")]),
+    );
+    models.set(node.id, {
+      node,
+      name: uniqueName(getTableName(node), usedTables, "tabela"),
+      fields,
+      columnNames,
+    });
+  }
+
+  return models;
+}
+
+function pkColumnOf(model: TableModel | undefined): string | null {
+  const field = model?.fields.find((f) => f.pk);
+  return field ? model!.columnNames.get(field.id) ?? null : null;
+}
+
+function buildCreateTable(model: TableModel, dialect: SqlDialect): string | null {
+  const { fields, columnNames, name, node } = model;
   if (fields.length === 0) return null;
 
-  const lines = fields.map((field) => `  ${buildColumnLine(field, dialect)}`);
+  const columnOf = (field: Field) => columnNames.get(field.id) as string;
+  const lines = fields.map((field) => `  ${buildColumnLine(field, columnOf(field), dialect)}`);
 
   const pkFields = fields.filter((field) => field.pk);
   if (pkFields.length) {
-    const pkColumns = pkFields
-      .map((field) => quote(field.name as string, dialect))
-      .join(", ");
+    const pkColumns = pkFields.map((field) => quote(columnOf(field), dialect)).join(", ");
     lines.push(`  PRIMARY KEY (${pkColumns})`);
   }
 
   getChecks(node).forEach((check, index) => {
-    const name = check.name?.trim() || defaultCheckName(getTableName(node), index);
-    lines.push(`  CONSTRAINT ${quote(name, dialect)} CHECK (${check.expression.trim()})`);
+    const checkName = check.name?.trim() || defaultCheckName(name, index);
+    lines.push(`  CONSTRAINT ${quote(checkName, dialect)} CHECK (${check.expression.trim()})`);
   });
 
-  return `CREATE TABLE ${quote(getTableName(node), dialect)} (\n${lines.join(",\n")}\n);`;
+  const table = quote(name, dialect);
+  const tableDescription = descriptionOf((node.data as { description?: unknown })?.description);
+  const tableOptions =
+    dialect === "mysql" && tableDescription ? ` COMMENT=${sqlString(tableDescription, dialect)}` : "";
+  const statements = [`CREATE TABLE ${table} (\n${lines.join(",\n")}\n)${tableOptions};`];
+
+  if (dialect === "postgres") {
+    if (tableDescription) statements.push(`COMMENT ON TABLE ${table} IS ${sqlString(tableDescription, dialect)};`);
+    for (const field of fields) {
+      const description = descriptionOf(field.description);
+      if (description) {
+        statements.push(
+          `COMMENT ON COLUMN ${table}.${quote(columnOf(field), dialect)} IS ${sqlString(description, dialect)};`,
+        );
+      }
+    }
+  }
+
+  return statements.join("\n");
 }
 
 type ForeignKey = {
@@ -188,82 +265,38 @@ const actionsOf = (edge?: CustomEdge) => ({
 function resolveForeignKeys(
   entityNodes: CustomNode[],
   edges: CustomEdge[],
+  models: Map<string, TableModel>,
 ): ForeignKey[] {
-  const findNode = (id?: string) => entityNodes.find((node) => node.id === id);
-  const processedJunctions = new Set<string>();
   const foreignKeys: ForeignKey[] = [];
+  const edgeById = new Map(edges.map((edge) => [edge.id, edge]));
 
-  for (const edge of edges) {
-    const data = edge.data;
-    if (!data) continue;
+  const push = (childId: string, field: Field | null, parentId: string, edge?: CustomEdge) => {
+    const child = models.get(childId);
+    const parent = models.get(parentId);
+    const column = field ? child?.columnNames.get(field.id) : undefined;
+    const refColumn = pkColumnOf(parent);
+    if (!child || !parent || !column || !refColumn) return;
+    foreignKeys.push({
+      tableNodeId: childId,
+      table: child.name,
+      column,
+      refTable: parent.name,
+      refColumn,
+      ...actionsOf(edge),
+    });
+  };
 
-    if (data.junctionId) {
-      if (processedJunctions.has(data.junctionId)) continue;
-      processedJunctions.add(data.junctionId);
+  for (const link of resolveJunctionFkLinks(entityNodes, edges)) {
+    push(link.junctionId, link.field, link.parentId, edgeById.get(link.edgeId));
+  }
 
-      const junctionNode = findNode(data.junctionId);
-      const sourceNode = findNode(data.sourceNodeId);
-      const targetNode = findNode(data.targetNodeId);
-      if (!junctionNode || !sourceNode || !targetNode) continue;
-
-      const fkFields = getValidFields(junctionNode).filter((field) => field.fk);
-      const sourceFieldName = `fk_${getTableName(sourceNode)}_id`.toLowerCase();
-      const targetFieldName = `fk_${getTableName(targetNode)}_id`.toLowerCase();
-
-      let sourceField = fkFields.find(
-        (field) => field.name?.toLowerCase() === sourceFieldName,
-      );
-      let targetField = fkFields.find(
-        (field) => field.name?.toLowerCase() === targetFieldName,
-      );
-
-      if (!sourceField) sourceField = fkFields[0];
-      if (!targetField) targetField = fkFields.find((f) => f !== sourceField);
-
-      const junctionEdges = edges.filter((e) => e.data?.junctionId === data.junctionId);
-      const sourceEdge = junctionEdges.find((e) => e.target === junctionNode.id);
-      const targetEdge = junctionEdges.find((e) => e.source === junctionNode.id);
-
-      if (sourceField) {
-        foreignKeys.push({
-          tableNodeId: junctionNode.id,
-          table: getTableName(junctionNode),
-          column: sourceField.name as string,
-          refTable: getTableName(sourceNode),
-          refColumn: findPkColumn(sourceNode),
-          ...actionsOf(sourceEdge),
-        });
-      }
-
-      if (targetField) {
-        foreignKeys.push({
-          tableNodeId: junctionNode.id,
-          table: getTableName(junctionNode),
-          column: targetField.name as string,
-          refTable: getTableName(targetNode),
-          refColumn: findPkColumn(targetNode),
-          ...actionsOf(targetEdge),
-        });
-      }
-    } else if (data.fkFieldName) {
-      const sourceNode = findNode(data.sourceNodeId) || findNode(edge.source);
-      const targetNode = findNode(data.targetNodeId) || findNode(edge.target);
-      if (!sourceNode || !targetNode) continue;
-
-      foreignKeys.push({
-        tableNodeId: targetNode.id,
-        table: getTableName(targetNode),
-        column: data.fkFieldName,
-        refTable: getTableName(sourceNode),
-        refColumn: findPkColumn(sourceNode),
-        ...actionsOf(edge),
-      });
-    }
+  for (const link of resolveDirectFkLinks(entityNodes, edges).values()) {
+    push(link.childId, link.field, link.parentId, edgeById.get(link.edgeId));
   }
 
   const seen = new Set<string>();
   return foreignKeys.filter((fk) => {
-    const key = `${fk.table}.${fk.column}`;
+    const key = `${fk.table}.${fk.column}`.toLowerCase();
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -291,22 +324,20 @@ export function defaultIndexName(table: string, columns: string[]): string {
   return sanitizeIdentifier(`idx_${table}_${columns.join("_")}`, "idx");
 }
 
-function buildIndexStatements(node: CustomNode, dialect: SqlDialect): string[] {
-  const indexes = ((node.data as { indexes?: TableIndex[] })?.indexes || []) as TableIndex[];
-  const fieldsById = new Map(getValidFields(node).map((field) => [field.id, field]));
-  const table = getTableName(node);
+function buildIndexStatements(model: TableModel, dialect: SqlDialect): string[] {
+  const indexes = ((model.node.data as { indexes?: TableIndex[] })?.indexes || []) as TableIndex[];
 
   return indexes.flatMap((index) => {
     const columns = index.columns
-      .map((fieldId) => fieldsById.get(fieldId)?.name)
+      .map((fieldId) => model.columnNames.get(fieldId))
       .filter((name): name is string => !!name);
     if (!columns.length) return [];
 
-    const name = index.name?.trim() || defaultIndexName(table, columns);
+    const name = index.name?.trim() || defaultIndexName(model.name, columns);
     const columnList = columns.map((column) => quote(column, dialect)).join(", ");
     return [
       `CREATE ${index.unique ? "UNIQUE " : ""}INDEX ${quote(name, dialect)} ` +
-        `ON ${quote(table, dialect)} (${columnList});`,
+        `ON ${quote(model.name, dialect)} (${columnList});`,
     ];
   });
 }
@@ -338,30 +369,34 @@ export function generateSqlBlocks(
   databaseName?: string,
 ): SqlBlocksResult {
   const entityNodes = nodes.filter((node) => node.type === "entityNode");
-  const foreignKeys = resolveForeignKeys(entityNodes, edges);
+  const models = buildTableModels(entityNodes);
+  const foreignKeys = resolveForeignKeys(entityNodes, edges, models);
 
   let skippedFields = 0;
   const blocks: SqlBlock[] = [];
 
-  for (const node of entityNodes) {
-    const allFields = ((node.data as any)?.fields || []) as Field[];
-    skippedFields += allFields.length - getValidFields(node).length;
+  for (const model of models.values()) {
+    const allFields = ((model.node.data as any)?.fields || []) as Field[];
+    skippedFields += allFields.length - model.fields.length;
 
-    const createStatement = buildCreateTable(node, dialect);
+    const createStatement = buildCreateTable(model, dialect);
     if (!createStatement) continue;
 
     blocks.push({
-      key: node.id,
-      title: getTableName(node),
+      key: model.node.id,
+      title: model.name,
       sql: createStatement,
     });
   }
 
-  // As tabelas referenciadas por uma FK só existem depois que todos os
-  // CREATE TABLE forem executados, então as constraints são emitidas à parte.
-  const foreignKeyStatements = foreignKeys.map((fk) => buildFkStatement(fk, dialect));
+  const emitted = new Set(blocks.map((block) => block.key));
+  const foreignKeyStatements = foreignKeys
+    .filter((fk) => emitted.has(fk.tableNodeId))
+    .map((fk) => buildFkStatement(fk, dialect));
 
-  const indexStatements = entityNodes.flatMap((node) => buildIndexStatements(node, dialect));
+  const indexStatements = [...models.values()]
+    .filter((model) => emitted.has(model.node.id))
+    .flatMap((model) => buildIndexStatements(model, dialect));
 
   let skippedViews = 0;
   const viewBlocks: SqlBlock[] = [];

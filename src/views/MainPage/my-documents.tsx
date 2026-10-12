@@ -15,6 +15,7 @@ import { AppLayout } from "../../components/LayoutComponents/AppLayout";
 import { api } from "../../services/api";
 import { getCurrentUser, getToken } from "../../utils/auth";
 import { DiagramCard } from "../../components/DashboardComponents/DiagramCard";
+import type { DiagramSummary } from "../../services/diagramsService";
 import { DocumentsLoading } from "../../components/DashboardComponents/DocumentsLoading";
 import CreateDiagramModal from "../../components/DashboardComponents/CreateDiagramModal";
 
@@ -216,6 +217,10 @@ const MyDocumentsPage: React.FC = () => {
                   document={doc}
                   onDelete={deleteDocument}
                   isDeleting={deletingId === doc.id}
+                  onRenamed={(renamed: DiagramSummary) =>
+                    setDocuments((prev) => prev.map((item) => (item.id === renamed.id ? { ...item, name: renamed.name } : item)))
+                  }
+                  onDuplicated={(copy: DiagramSummary) => setDocuments((prev) => [copy, ...prev])}
                 />
               </Col>
             ))}

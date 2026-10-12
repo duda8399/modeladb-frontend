@@ -3,7 +3,7 @@ import { Card, Row, Col, Button, Input } from "antd";
 import { CheckCircleOutlined, CloseOutlined, KeyOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import AttributesModal from "./AttributesModal";
 import TableConstraintsModal from "./TableConstraintsModal";
-import { formatTypeWithSize } from "../../utils/sqlTypes";
+import { formatTypeLabel } from "../../utils/sqlTypes";
 import DeleteModal from "./DeleteModal";
 import { Handle, Position } from "reactflow";
 import type { Field, TableCheck, TableIndex } from "../../types/diagramER";
@@ -16,12 +16,14 @@ interface Props {
     name?: string;
     indexes?: TableIndex[];
     checks?: TableCheck[];
+    description?: string | null;
   };
   onDelete?: () => void;
   onRename?: (value: string) => void;
   onFieldsChange?: (fields: Field[]) => void;
   onIndexesChange?: (indexes: TableIndex[]) => void;
   onChecksChange?: (checks: TableCheck[]) => void;
+  onDescriptionChange?: (description: string | null) => void;
 }
 
 export default memo(function EntityNode({
@@ -31,6 +33,7 @@ export default memo(function EntityNode({
   onFieldsChange,
   onIndexesChange,
   onChecksChange,
+  onDescriptionChange,
 }: Props) {
   const fields = data.fields || [];
   const indexes = data.indexes || [];
@@ -74,6 +77,11 @@ export default memo(function EntityNode({
         setOpen={setOpen}
         fields={fields}
         setFields={(newFields) => onFieldsChange?.(newFields)}
+        tableName={data.name}
+        tableDescription={data.description}
+        onTableDescriptionChange={(value) => {
+          if ((value ?? null) !== (data.description ?? null)) onDescriptionChange?.(value);
+        }}
       />
 
       <TableConstraintsModal
@@ -108,6 +116,7 @@ export default memo(function EntityNode({
               alignItems: "center",
               gap: 6,
             }}
+            title={data.description || undefined}
           >
             <Input
               value={entityName}
@@ -164,7 +173,7 @@ export default memo(function EntityNode({
                 {field.pk && <KeyOutlined style={{ color: "#faad14" }} />}
                 {field.fk && <FkIcon />}
                 <span
-                  title={field.name || "-"}
+                  title={[field.name || "-", field.description].filter(Boolean).join(" — ")}
                   style={{
                     overflow: "hidden",
                     textOverflow: "ellipsis",
@@ -186,12 +195,12 @@ export default memo(function EntityNode({
                 whiteSpace: "nowrap",
               }}
               title={
-                [formatTypeWithSize(field.type, field.size), field.defaultValue && `DEFAULT ${field.defaultValue}`]
+                [formatTypeLabel(field), field.defaultValue && `DEFAULT ${field.defaultValue}`]
                   .filter(Boolean)
                   .join(" ") || undefined
               }
             >
-              {formatTypeWithSize(field.type, field.size)}
+              {formatTypeLabel(field)}
             </Col>
           </Row>
         ))}

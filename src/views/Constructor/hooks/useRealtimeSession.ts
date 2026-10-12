@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import realtimeService, {
   type AccessRevokedEvent,
   type ConnectionStatus,
+  type DocumentRenamedEvent,
   type DocumentRestoredEvent,
   type PresenceEvent,
   type PresenceUser,
@@ -18,6 +19,7 @@ type Handlers = {
   onResyncNeeded: () => Promise<void>;
   onDocumentRestored: (event: DocumentRestoredEvent) => void;
   onRoleChanged: (event: RoleChangedEvent) => void;
+  onDocumentRenamed?: (event: DocumentRenamedEvent) => void;
   onAccessRevoked: (event: AccessRevokedEvent) => void;
   onError: (error: RealtimeError) => void;
 };
@@ -90,6 +92,7 @@ export function useRealtimeSession({ diagramId, userId, enabled, ...handlers }: 
       onError: (error) => handlersRef.current.onError(error),
       onDocumentRestored: (event) => handlersRef.current.onDocumentRestored(event),
       onRoleChanged: (event) => handlersRef.current.onRoleChanged(event),
+      onDocumentRenamed: (event) => handlersRef.current.onDocumentRenamed?.(event),
       onAccessRevoked: (event) => handlersRef.current.onAccessRevoked(event),
       onResyncNeeded: () => handlersRef.current.onResyncNeeded(),
       onStatusChange: (next, pending) => {

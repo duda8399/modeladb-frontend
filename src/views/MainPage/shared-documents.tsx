@@ -80,6 +80,11 @@ const SharedDocumentsPage: React.FC = () => {
                   isShared
                   onLeave={leaveDiagram}
                   isLeaving={leavingId === doc.id}
+                  onRenamed={(renamed) =>
+                    setSharedDocuments((docs) =>
+                      docs.map((item) => (item.id === renamed.id ? { ...item, name: renamed.name } : item)),
+                    )
+                  }
                 />
               </Col>
             ))}

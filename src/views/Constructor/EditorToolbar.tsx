@@ -1,5 +1,5 @@
-import { Button, ColorPicker, Divider, Select, Space } from "antd";
-import { HistoryOutlined } from "@ant-design/icons";
+import { Button, ColorPicker, Divider, Dropdown, Select, Space, type MenuProps } from "antd";
+import { ExportOutlined, HistoryOutlined, ImportOutlined, MoreOutlined } from "@ant-design/icons";
 import {
   AlignCenterOutlined,
   AlignLeftOutlined,
@@ -17,8 +17,8 @@ import { startTrackingSelection, restoreSelection } from "../../utils/selectionU
 import { useEffect, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { CustomEdge, CustomNode } from "../../types/diagramER";
-import { ExportButton } from "../../components/ConstructorComponents/ExportButton";
-import { ImportButton } from "../../components/ConstructorComponents/ImportButton";
+import { downloadDiagramJson } from "../../components/ConstructorComponents/diagramJsonExport";
+import { useDiagramImport } from "../../components/ConstructorComponents/useDiagramImport";
 import type { ConnectionStatus, PresenceUser } from "../../services/realtimeService";
 import { ConnectionStatusBadge } from "../../components/ConstructorComponents/ConnectionStatusBadge";
 import { colorForUserId, initialFor } from "../../utils/presence";
@@ -131,6 +131,30 @@ export function EditorToolbar({
   onBgColorChange,
 }: EditorToolbarProps) {
   useEffect(() => startTrackingSelection(), []);
+
+  const diagramImport = useDiagramImport({
+    diagramName,
+    onDiagramNameChange,
+    nodes,
+    edges,
+    setNodes,
+    setEdges,
+    onBeforeImportReplace,
+  });
+
+  const moreItems: MenuProps["items"] = [
+    ...(readOnly
+      ? []
+      : [{ key: "import", icon: <ImportOutlined />, label: "Importar", disabled: diagramImport.importing }]),
+    { key: "export", icon: <ExportOutlined />, label: "Exportar" },
+    { key: "history", icon: <HistoryOutlined />, label: "Histórico" },
+  ];
+
+  const handleMoreClick: MenuProps["onClick"] = ({ key }) => {
+    if (key === "import") diagramImport.startImport();
+    if (key === "export") downloadDiagramJson(diagramName, nodes, edges);
+    if (key === "history") onOpenHistory();
+  };
 
   useEffect(() => {
     const handler = () => {
@@ -479,21 +503,10 @@ export function EditorToolbar({
         <Button type="primary" onClick={onSave} loading={saving} disabled={readOnly}>
           Salvar
         </Button>
-        <Button title="Histórico de versões" icon={<HistoryOutlined />} onClick={onOpenHistory}>
-          Histórico
-        </Button>
-        {!readOnly && (
-          <ImportButton
-            diagramName={diagramName}
-            onDiagramNameChange={onDiagramNameChange}
-            nodes={nodes}
-            edges={edges}
-            setNodes={setNodes}
-            setEdges={setEdges}
-            onBeforeImportReplace={onBeforeImportReplace}
-          />
-        )}
-        <ExportButton diagramName={diagramName} nodes={nodes} edges={edges} />
+        {diagramImport.contextHolder}
+        <Dropdown menu={{ items: moreItems, onClick: handleMoreClick }} trigger={["click"]} placement="bottomRight">
+          <Button aria-label="Mais opções" title="Mais opções" icon={<MoreOutlined />} loading={diagramImport.importing} />
+        </Dropdown>
       </Space>
     </div>
   );

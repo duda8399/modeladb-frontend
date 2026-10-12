@@ -17,6 +17,8 @@ export interface Field {
   ai: boolean;
   size?: string | null;
   defaultValue?: string | null;
+  values?: string[] | null;
+  description?: string | null;
 }
 
 export interface CustomNode extends Node {
@@ -32,6 +34,7 @@ export type CustomEdge = Edge & {
     targetNodeId?: string;
     junctionId?: string;
     fkFieldName?: string;
+    fkFieldId?: string;
     onDelete?: FkAction | null;
     onUpdate?: FkAction | null;
   };

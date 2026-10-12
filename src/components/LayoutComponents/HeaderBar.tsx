@@ -8,6 +8,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { logout } from "../../services/auth.service";
+import { InvitationsBell } from "./InvitationsBell";
 const { Header } = Layout;
 
 type HeaderBarProps = {
@@ -86,6 +87,8 @@ export function HeaderBar({ collapsed, setCollapsed }: HeaderBarProps) {
         }}
       />
 
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+      <InvitationsBell />
       <Dropdown
         menu={{ items: profileMenuItems, onClick: handleMenuClick }}
         trigger={["click"]}
@@ -100,6 +103,7 @@ export function HeaderBar({ collapsed, setCollapsed }: HeaderBarProps) {
           />
         </Button>
       </Dropdown>
+      </div>
     </Header>
   );
 }

@@ -31,7 +31,13 @@ describe("buildRelationshipOps", () => {
         target: "p",
         sourceHandle: "r",
         label: "1:N",
-        data: { relationType: "1:N", sourceNodeId: "c", targetNodeId: "p", fkFieldName: "fk_cliente_id" },
+        data: {
+          relationType: "1:N",
+          sourceNodeId: "c",
+          targetNodeId: "p",
+          fkFieldName: "fk_cliente_id",
+          fkFieldId: ops[1].payload.id,
+        },
       }),
     );
     expect(ops[1]).toEqual(

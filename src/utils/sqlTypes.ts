@@ -46,3 +46,43 @@ export function formatTypeWithSize(type: string | null | undefined, size: string
   if (!type) return "";
   return value && isSizedType(type) ? `${type}(${value})` : type;
 }
+
+export const VALUE_LIST_TYPES = new Set(["ENUM", "SET"]);
+
+export function isValueListType(type: string | null | undefined): boolean {
+  return !!type && VALUE_LIST_TYPES.has(type.toUpperCase());
+}
+
+export function valueKey(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+export function normalizeValues(
+  values: readonly (string | null | undefined)[] | null | undefined,
+  type?: string | null,
+): string[] {
+  const isSet = type?.toUpperCase() === "SET";
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const raw of values ?? []) {
+    const value = (isSet ? (raw ?? "").replace(/,/g, "") : raw ?? "").trim();
+    const key = valueKey(value);
+    if (!value || seen.has(key)) continue;
+    seen.add(key);
+    result.push(value);
+  }
+  return result;
+}
+
+export function formatTypeLabel(field: {
+  type: string | null | undefined;
+  size?: string | null;
+  values?: string[] | null;
+}): string {
+  if (!field.type) return "";
+  if (isValueListType(field.type)) {
+    const values = normalizeValues(field.values, field.type);
+    return values.length ? `${field.type}(${values.join(", ")})` : field.type;
+  }
+  return formatTypeWithSize(field.type, field.size);
+}

@@ -1,24 +1,16 @@
 import { Tooltip } from "antd";
 import type { ConnectionStatus } from "../../services/realtimeService";
 
-const LABELS: Record<ConnectionStatus, { text: string; color: string; hint: string }> = {
-  connected: {
-    text: "Conectado",
-    color: "#2F7D32",
-    hint: "As alterações estão sendo sincronizadas em tempo real.",
-  },
-  connecting: {
-    text: "Conectando…",
-    color: "#d48806",
-    hint: "Estabelecendo a conexão em tempo real.",
-  },
+type VisibleStatus = Extract<ConnectionStatus, "reconnecting" | "offline">;
+
+const LABELS: Record<VisibleStatus, { text: string; color: string; hint: string }> = {
   reconnecting: {
     text: "Reconectando…",
     color: "#d48806",
     hint: "A conexão caiu. Você pode continuar editando: as alterações serão enviadas quando ela voltar.",
   },
   offline: {
-    text: "Offline",
+    text: "Desconectado",
     color: "#B11226",
     hint: "Sem conexão em tempo real. Recarregue a página para tentar novamente.",
   },
@@ -30,6 +22,7 @@ type Props = {
 };
 
 export function ConnectionStatusBadge({ status, pendingCount }: Props) {
+  if (status !== "reconnecting" && status !== "offline") return null;
   const label = LABELS[status];
   const pending =
     pendingCount > 0
