@@ -1,6 +1,6 @@
 import { memo, useMemo, useState } from "react";
-import { Alert, Button, Card, Input, Modal, Typography } from "antd";
-import { CloseOutlined, EyeOutlined } from "@ant-design/icons";
+import { Alert, Button, Card, Input, Modal, Tooltip, Typography } from "antd";
+import { CloseOutlined, EyeOutlined, WarningFilled } from "@ant-design/icons";
 import { Handle, Position, useStore } from "reactflow";
 import CodeMirror from "@uiw/react-codemirror";
 import { sql as sqlLanguage } from "@codemirror/lang-sql";
@@ -17,8 +17,10 @@ const HEADER_COLOR = "#1565C0";
 interface Props {
   id: string;
   data: Partial<ViewNodeData>;
+  duplicateName?: boolean;
+  validateName?: (value: string) => string | null;
   onDelete?: () => void;
-  onRename?: (value: string) => void;
+  onRename?: (value: string) => boolean | void;
   onSqlChange?: (sql: string) => void;
 }
 
@@ -28,7 +30,7 @@ const diagramNamesSelector = (state: { nodeInternals: Map<string, { type?: strin
     .map((node) => normalizeSqlName(node.data?.name ?? ""))
     .join("\n");
 
-export default memo(function ViewNode({ data, onDelete, onRename, onSqlChange }: Props) {
+export default memo(function ViewNode({ data, duplicateName, validateName, onDelete, onRename, onSqlChange }: Props) {
   const sql = data.sql ?? "";
   const [draftName, setDraftName] = useState("");
   const [isEditingName, setIsEditingName] = useState(false);
@@ -38,6 +40,7 @@ export default memo(function ViewNode({ data, onDelete, onRename, onSqlChange }:
   const diagramNames = useStore(diagramNamesSelector);
 
   const name = isEditingName ? draftName : data.name || "view";
+  const nameProblem = isEditingName ? validateName?.(draftName) ?? null : null;
 
   const analysis = useMemo(() => analyzeViewSql(sql), [sql]);
   const draftAnalysis = useMemo(() => analyzeViewSql(draftSql), [draftSql]);
@@ -113,8 +116,10 @@ export default memo(function ViewNode({ data, onDelete, onRename, onSqlChange }:
         title={
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <EyeOutlined style={{ color: "#FFFFFF" }} />
+            <Tooltip open={nameProblem ? true : undefined} title={nameProblem}>
             <Input
               aria-label="Nome da view"
+              status={nameProblem ? "error" : undefined}
               value={name}
               onChange={(e) => setDraftName(e.target.value)}
               onFocus={() => {
@@ -123,7 +128,9 @@ export default memo(function ViewNode({ data, onDelete, onRename, onSqlChange }:
               }}
               onBlur={() => {
                 setIsEditingName(false);
-                onRename?.(name);
+                const next = draftName.trim();
+                if (next === (data.name || "view") || validateName?.(next)) return;
+                onRename?.(next);
               }}
               onPressEnter={(e) => (e.target as HTMLInputElement).blur()}
               size="small"
@@ -137,6 +144,12 @@ export default memo(function ViewNode({ data, onDelete, onRename, onSqlChange }:
                 textAlign: "center",
               }}
             />
+            </Tooltip>
+            {duplicateName && (
+              <Tooltip title="Outro item do diagrama tem este mesmo nome. Renomeie um deles.">
+                <WarningFilled aria-label="Nome repetido" style={{ color: "#ff7875" }} />
+              </Tooltip>
+            )}
             <CloseOutlined
               aria-label="Excluir view"
               style={{ cursor: "pointer", color: "#FFFFFF" }}

@@ -331,7 +331,7 @@ describe("tamanho, DEFAULT, CHECK e ações de FK", () => {
       );
     `);
     const sizes = Object.fromEntries(fieldsOf(tableByName(nodes, "t")).map((f) => [f.name, f.size ?? null]));
-    expect(sizes).toEqual({ a: "120", b: "2", c: "12,2", d: "40", e: "8", f: "3", g: null, h: "8", i: null });
+    expect(sizes).toEqual({ id: null, a: "120", b: "2", c: "12,2", d: "40", e: "8", f: "3", g: null, h: "8", i: null });
   });
 
   it("lê DEFAULT de MySQL e PostgreSQL, sem os casts do pg_dump", () => {
@@ -443,7 +443,7 @@ describe("índices", () => {
 
   it("índice com expressão é ignorado com aviso", () => {
     const { warnings } = parseSqlToDiagram(
-      "CREATE TABLE p (nome TEXT); CREATE INDEX idx_lower ON p (lower(nome));",
+      "CREATE TABLE p (id INT PRIMARY KEY, nome TEXT); CREATE INDEX idx_lower ON p (lower(nome));",
     );
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("idx_lower");
@@ -652,5 +652,65 @@ describe("ENUM, SET e descrições", () => {
     expect((tableByName(nodes, "c").data as { description?: string }).description).toBe("clientes");
     expect(field(nodes, "c", "nome").description).toBe("nome completo");
     expect(field(nodes, "c", "id").description).toBeUndefined();
+  });
+});
+
+describe("chave primária obrigatória", () => {
+  it("cria a coluna id como PK quando a tabela não tem chave primária", () => {
+    const { nodes, warnings } = parseSqlToDiagram("CREATE TABLE log (msg TEXT, criado DATE);");
+    const fields = fieldsOf(tableByName(nodes, "log"));
+    expect(fields.map((f) => [f.name, f.type, f.pk, f.ai])).toEqual([
+      ["id", "INT", true, true],
+      ["msg", "TEXT", false, false],
+      ["criado", "DATE", false, false],
+    ]);
+    expect(warnings).toEqual([expect.stringContaining('foi criada a coluna "id"')]);
+  });
+
+  it("promove a coluna id existente em vez de criar outra", () => {
+    const { nodes, warnings } = parseSqlToDiagram("CREATE TABLE t (id BIGINT, nome TEXT);");
+    const fields = fieldsOf(tableByName(nodes, "t"));
+    expect(fields.map((f) => [f.name, f.type, f.pk, f.notNull])).toEqual([
+      ["id", "BIGINT", true, true],
+      ["nome", "TEXT", false, false],
+    ]);
+    expect(warnings).toEqual([expect.stringContaining('a coluna "id" virou a PK')]);
+  });
+
+  it("não mexe em tabelas que já têm PK, inclusive composta", () => {
+    const { nodes, warnings } = parseSqlToDiagram(
+      "CREATE TABLE a (x INT, y INT, PRIMARY KEY (x, y)); CREATE TABLE b (codigo INT PRIMARY KEY);",
+    );
+    expect(fieldsOf(tableByName(nodes, "a")).map((f) => [f.name, f.pk])).toEqual([
+      ["x", true],
+      ["y", true],
+    ]);
+    expect(fieldsOf(tableByName(nodes, "b")).map((f) => f.name)).toEqual(["codigo"]);
+    expect(warnings).toEqual([]);
+  });
+});
+
+describe("nomes únicos na importação", () => {
+  it("renomeia a view que tem o mesmo nome de uma tabela e avisa", () => {
+    const { nodes, warnings } = parseSqlToDiagram(
+      "CREATE TABLE resumo (id INT PRIMARY KEY); CREATE VIEW Resumo AS SELECT id FROM resumo;",
+    );
+    expect(nodes.map((n) => [n.type, (n.data as { name: string }).name])).toEqual([
+      ["entityNode", "resumo"],
+      ["viewNode", "Resumo_2"],
+    ]);
+    expect(warnings).toContain('O nome "Resumo" já estava em uso; o item foi renomeado para "Resumo_2".');
+  });
+});
+
+describe("nomes de atributo únicos na importação", () => {
+  it("renomeia colunas repetidas da mesma tabela e avisa", () => {
+    const { nodes, warnings } = parseSqlToDiagram("CREATE TABLE t (id INT PRIMARY KEY, nome TEXT, NOME VARCHAR(10));");
+    expect(fieldsOf(tableByName(nodes, "t")).map((f) => [f.name, f.type])).toEqual([
+      ["id", "INT"],
+      ["nome", "TEXT"],
+      ["NOME_2", "VARCHAR"],
+    ]);
+    expect(warnings).toContain('A tabela "t" tinha mais de um atributo "NOME"; um deles foi renomeado para "NOME_2".');
   });
 });

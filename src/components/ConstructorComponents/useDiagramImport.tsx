@@ -3,8 +3,11 @@ import { useState } from "react";
 
 import type { Dispatch, SetStateAction } from "react";
 
-import type { CustomEdge, CustomNode } from "../../types/diagramER";
+import type { CustomEdge, CustomNode, Field } from "../../types/diagramER";
 import { parseSqlToDiagram, SqlImportError } from "../../utils/sqlImport";
+import { ensurePrimaryKey, pkFixMessage } from "../../utils/primaryKey";
+import { dedupeNodeNames, renameMessage } from "../../utils/entityNames";
+import { dedupeFieldNames, fieldRenameMessage } from "../../utils/fieldNames";
 
 interface DiagramImportParams {
   diagramName: string;
@@ -60,11 +63,27 @@ export function useDiagramImport({
           throw new Error("Arquivo inválido");
         }
 
+        const importWarnings: string[] = [];
+        const named = dedupeNodeNames(importedNodes as CustomNode[]);
+        importWarnings.push(...named.renamed.map(renameMessage));
+        const fixedNodes = named.nodes.map((node: CustomNode) => {
+          if (node?.type !== "entityNode" || !Array.isArray(node.data?.fields)) return node;
+          const tableName = node.data?.name || "sem nome";
+          const deduped = dedupeFieldNames(node.data.fields as Field[]);
+          importWarnings.push(...deduped.renamed.map((change) => fieldRenameMessage(tableName, change)));
+          const { fields, fix } = ensurePrimaryKey(deduped.fields);
+          const message = pkFixMessage(tableName, fix);
+          if (message) importWarnings.push(message);
+          if (!message && !deduped.renamed.length) return node;
+          return { ...node, data: { ...node.data, fields } };
+        });
+
         onBeforeImportReplace();
         onDiagramNameChange(parsed.diagramName || parsed.name || "");
-        setNodes(importedNodes);
+        setNodes(fixedNodes);
         setEdges(importedEdges);
         messageApi.success("Diagrama importado com sucesso");
+        if (importWarnings.length) showWarnings("Alguns itens foram ajustados na importação", importWarnings);
       } catch {
         messageApi.error("Arquivo inválido. Selecione um JSON de diagrama válido.");
         setNodes(oldNodes);
@@ -82,6 +101,19 @@ export function useDiagramImport({
 
     reader.readAsText(file);
   };
+
+  const showWarnings = (title: string, warnings: string[]) =>
+    modal.warning({
+      title,
+      width: 560,
+      content: (
+        <ul style={{ paddingLeft: 18, margin: 0, maxHeight: 300, overflowY: "auto" }}>
+          {warnings.map((warning, index) => (
+            <li key={index}>{warning}</li>
+          ))}
+        </ul>
+      ),
+    });
 
   const importSql = (content: string) => {
     try {
@@ -111,19 +143,7 @@ export function useDiagramImport({
         parts.length > 1 ? `${parts.slice(0, -1).join(", ")} e ${parts[parts.length - 1]}` : parts[0];
       messageApi.success(`SQL importado: ${summary}`);
 
-      if (warnings.length) {
-        modal.warning({
-          title: "Alguns trechos do SQL não foram convertidos",
-          width: 560,
-          content: (
-            <ul style={{ paddingLeft: 18, margin: 0, maxHeight: 300, overflowY: "auto" }}>
-              {warnings.map((warning, index) => (
-                <li key={index}>{warning}</li>
-              ))}
-            </ul>
-          ),
-        });
-      }
+      if (warnings.length) showWarnings("Alguns trechos do SQL não foram convertidos", warnings);
     } catch (error) {
       messageApi.error(
         error instanceof SqlImportError

@@ -1,4 +1,6 @@
 import type { CollabNode, OperationDraft } from "../stores/diagramCollabStore";
+import { uniqueName } from "./entityNames";
+import { uniqueFieldName } from "./fieldNames";
 
 export type RelationType = "1:1" | "1:N" | "N:N";
 
@@ -25,6 +27,7 @@ export function buildRelationshipOps(
   source: Endpoint,
   target: Endpoint,
   newId: () => string = () => crypto.randomUUID(),
+  existingNodes: readonly CollabNode[] = [],
 ): OperationDraft[] {
   const sourceName = source.node?.data.name || source.id;
   const targetName = target.node?.data.name || target.id;
@@ -43,10 +46,10 @@ export function buildRelationshipOps(
       type: "entityNode",
       position: { x: (sx + tx) / 2, y: (sy + ty) / 2 },
       data: {
-        name: `${sourceName}_${targetName}`,
+        name: uniqueName(`${sourceName}_${targetName}`, existingNodes),
         fields: [
           fkField(newId(), `fk_${sourceName}_id`, 0, true),
-          fkField(newId(), `fk_${targetName}_id`, 1, true),
+          fkField(newId(), uniqueFieldName(`fk_${targetName}_id`, [{ id: "", name: `fk_${sourceName}_id` }]), 1, true),
         ],
       },
     };
@@ -63,7 +66,7 @@ export function buildRelationshipOps(
   }
 
   const edgeId = newId();
-  const fkName = `fk_${sourceName}_id`;
+  const fkName = uniqueFieldName(`fk_${sourceName}_id`, target.node?.data.fields);
   const fkFieldId = newId();
 
   const edge = {

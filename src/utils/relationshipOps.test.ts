@@ -68,6 +68,37 @@ describe("buildRelationshipOps", () => {
     expect(ops[2].payload).toEqual(expect.objectContaining({ source: junction.id, target: "c" }));
   });
 
+  it("um segundo relacionamento entre as mesmas tabelas cria a FK com outro nome", () => {
+    const pedido = node("p", "pedido", 100);
+    pedido.data.fields = [
+      { id: "p1", name: "id", pk: true },
+      { id: "p2", name: "FK_Cliente_ID", fk: true },
+    ] as unknown as typeof pedido.data.fields;
+    const ops = buildRelationshipOps("1:N", { id: "c", node: node("c", "cliente", 0) }, { id: "p", node: pedido }, ids());
+
+    expect(ops[1].payload.name).toBe("fk_cliente_id_2");
+    expect(ops[0].payload.data.fkFieldName).toBe("fk_cliente_id_2");
+  });
+
+  it("N:N de uma tabela com ela mesma não repete o nome da FK", () => {
+    const pessoa = node("a", "pessoa", 0);
+    const ops = buildRelationshipOps("N:N", { id: "a", node: pessoa }, { id: "a", node: pessoa }, ids());
+
+    expect(ops[0].payload.data.fields.map((f: { name: string }) => f.name)).toEqual(["fk_pessoa_id", "fk_pessoa_id_2"]);
+  });
+
+  it("N:N escolhe outro nome quando a tabela associativa já existe", () => {
+    const aluno = node("a", "aluno", 0);
+    const curso = node("c", "curso", 200);
+    const ops = buildRelationshipOps("N:N", { id: "a", node: aluno }, { id: "c", node: curso }, ids(), [
+      aluno,
+      curso,
+      node("j", "Aluno_Curso", 100),
+    ]);
+
+    expect(ops[0].payload.data.name).toBe("aluno_curso_2");
+  });
+
   it("usa o id quando a tabela não tem nome", () => {
     const ops = buildRelationshipOps("1:1", { id: "x" }, { id: "y" }, ids());
 

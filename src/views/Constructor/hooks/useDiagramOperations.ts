@@ -9,6 +9,9 @@ import {
   type OperationDraft,
 } from "../../../stores/diagramCollabStore";
 import { diffFields, visibleFields } from "../../../utils/fieldOps";
+import { hasPrimaryKey, isLastPrimaryKey } from "../../../utils/primaryKey";
+import { nameError } from "../../../utils/entityNames";
+import { introducesDuplicateFieldName } from "../../../utils/fieldNames";
 import { resolveDirectFkLinks, type FkEdgeLike, type FkNodeLike } from "../../../utils/foreignKeys";
 import type { RelationshipChanges } from "../../../components/ConstructorComponents/RelationshipModal";
 
@@ -114,7 +117,17 @@ export function useDiagramOperations({ userId, readOnly, emitOperation, setNodes
         const link = currentDirectLinks().get(edgeId);
 
         if (link?.field?.fk) {
-          sendOp({ type: "REMOVE_FIELD", targetId: link.childId, payload: { fieldId: link.field.id } });
+          const childFields = store.getNode(link.childId)?.data.fields as Field[] | undefined;
+          if (isLastPrimaryKey(childFields, link.field.id)) {
+            sendOp({
+              type: "SET_FIELD_PROP",
+              targetId: link.childId,
+              payload: { fieldId: link.field.id, key: "fk", value: false },
+              previousValue: true,
+            });
+          } else {
+            sendOp({ type: "REMOVE_FIELD", targetId: link.childId, payload: { fieldId: link.field.id } });
+          }
         }
       }
 
@@ -135,14 +148,24 @@ export function useDiagramOperations({ userId, readOnly, emitOperation, setNodes
   );
 
   const setNodeProp = useCallback(
-    (nodeId: string, key: string, value: unknown) => {
-      const node = useDiagramCollabStore.getState().getNode(nodeId);
-      if (!node) return;
+    (nodeId: string, key: string, value: unknown): boolean => {
+      const store = useDiagramCollabStore.getState();
+      const node = store.getNode(nodeId);
+      if (!node) return false;
 
       const previousValue = (node.data as Record<string, unknown>)[key];
-      if (previousValue === value) return;
+      if (previousValue === value) return true;
+
+      if (
+        key === "name" &&
+        (node.type === "entityNode" || node.type === "viewNode") &&
+        nameError(store.nodes, String(value ?? ""), nodeId)
+      ) {
+        return false;
+      }
 
       sendOp({ type: "SET_NODE_PROP", targetId: nodeId, payload: { key, value }, previousValue });
+      return true;
     },
     [sendOp],
   );
@@ -171,6 +194,9 @@ export function useDiagramOperations({ userId, readOnly, emitOperation, setNodes
     (nodeId: string, newFields: Field[]) => {
       const node = useDiagramCollabStore.getState().getNode(nodeId);
       if (!node) return;
+      const currentFields = visibleFields(node.data.fields);
+      if (!hasPrimaryKey(newFields) && hasPrimaryKey(currentFields)) return;
+      if (introducesDuplicateFieldName(currentFields, newFields)) return;
 
       const linksBefore = currentDirectLinks();
       const fieldOps = diffFields(nodeId, node.data.fields, newFields);

@@ -6,19 +6,31 @@ import SectionNode from "../../../components/ConstructorComponents/SectionNode";
 import TextNode from "../../../components/ConstructorComponents/TextNode";
 import ViewNode from "../../../components/ConstructorComponents/ViewNode";
 import type { Field, TableCheck, TableIndex, ViewNodeData } from "../../../types/diagramER";
+import { useDiagramCollabStore } from "../../../stores/diagramCollabStore";
+import { duplicateNameIds, nameError } from "../../../utils/entityNames";
+
+const validateNameFor = (nodeId: string) => (name: string) =>
+  nameError(useDiagramCollabStore.getState().nodes, name, nodeId);
+
+const useHasDuplicateName = (nodeId: string) =>
+  useDiagramCollabStore((state) => duplicateNameIds(state.nodes).has(nodeId));
 
 type Actions = {
   deleteNode: (nodeId: string) => void;
-  setNodeProp: (nodeId: string, key: string, value: unknown) => void;
+  setNodeProp: (nodeId: string, key: string, value: unknown) => boolean;
   resizeNode: (nodeId: string, width: number, height: number) => void;
   onFieldsChange: (nodeId: string, fields: Field[]) => void;
 };
 
 export function useNodeTypes({ deleteNode, setNodeProp, resizeNode, onFieldsChange }: Actions) {
   const EntityNodeConnected = useCallback(
-    (props: NodeProps) => (
+    function EntityNodeWithActions(props: NodeProps) {
+      const duplicateName = useHasDuplicateName(props.id);
+      return (
       <EntityNode
         {...props}
+        duplicateName={duplicateName}
+        validateName={validateNameFor(props.id)}
         onDelete={() => deleteNode(props.id)}
         onRename={(value: string) => setNodeProp(props.id, "name", value)}
         onFieldsChange={(fields: Field[]) => onFieldsChange(props.id, fields)}
@@ -26,19 +38,25 @@ export function useNodeTypes({ deleteNode, setNodeProp, resizeNode, onFieldsChan
         onChecksChange={(checks: TableCheck[]) => setNodeProp(props.id, "checks", checks)}
         onDescriptionChange={(description: string | null) => setNodeProp(props.id, "description", description)}
       />
-    ),
+      );
+    },
     [deleteNode, setNodeProp, onFieldsChange],
   );
 
   const ViewNodeConnected = useCallback(
-    (props: NodeProps<ViewNodeData>) => (
-      <ViewNode
-        {...props}
-        onDelete={() => deleteNode(props.id)}
-        onRename={(value: string) => setNodeProp(props.id, "name", value)}
-        onSqlChange={(sql: string) => setNodeProp(props.id, "sql", sql)}
-      />
-    ),
+    function ViewNodeWithActions(props: NodeProps<ViewNodeData>) {
+      const duplicateName = useHasDuplicateName(props.id);
+      return (
+        <ViewNode
+          {...props}
+          duplicateName={duplicateName}
+          validateName={validateNameFor(props.id)}
+          onDelete={() => deleteNode(props.id)}
+          onRename={(value: string) => setNodeProp(props.id, "name", value)}
+          onSqlChange={(sql: string) => setNodeProp(props.id, "sql", sql)}
+        />
+      );
+    },
     [deleteNode, setNodeProp],
   );
 

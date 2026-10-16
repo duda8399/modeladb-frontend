@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { CloseOutlined, FileTextOutlined, HolderOutlined } from "@ant-design/icons";
 import {
+  Alert,
   Button,
   Checkbox,
   Col,
@@ -22,6 +23,14 @@ import {
   normalizeValues,
   sizePlaceholder,
 } from "../../utils/sqlTypes";
+import {
+  PK_REQUIRED_MESSAGE,
+  defaultPkField,
+  ensurePrimaryKey,
+  hasPrimaryKey,
+  isLastPrimaryKey,
+} from "../../utils/primaryKey";
+import { duplicateFieldIds, fieldNameError } from "../../utils/fieldNames";
 
 const { Title, Text } = Typography;
 
@@ -93,21 +102,32 @@ interface Props {
 // o que interrompe a composicao de acentos via dead-key (~, ^, ´) no meio da digitacao.
 function NameCell({
   field,
+  validate,
+  duplicated,
   onCommit,
 }: {
   field: Field;
+  validate: (value: string) => string | null;
+  duplicated: boolean;
   onCommit: (value: string) => void;
 }) {
   const [value, setValue] = useState(field.name ?? "");
   const [editing, setEditing] = useState(false);
+  const problem = editing ? validate(value) : null;
 
   useEffect(() => {
     if (!editing) setValue(field.name ?? "");
   }, [field.name, editing]);
 
   return (
+    <Tooltip
+      open={problem ? true : undefined}
+      title={problem ?? (duplicated ? "Outro atributo desta entidade tem este mesmo nome." : undefined)}
+    >
     <Input
       placeholder="Nome da coluna"
+      aria-label="Nome da coluna"
+      status={problem || (!editing && duplicated) ? "error" : undefined}
       value={value}
       prefix={
         field.pk ? (
@@ -122,10 +142,15 @@ function NameCell({
       onFocus={() => setEditing(true)}
       onBlur={() => {
         setEditing(false);
+        if (validate(value)) {
+          setValue(field.name ?? "");
+          return;
+        }
         if (value !== (field.name ?? "")) onCommit(value);
       }}
       onPressEnter={(e) => (e.target as HTMLInputElement).blur()}
     />
+    </Tooltip>
   );
 }
 
@@ -210,16 +235,7 @@ export default function Attributes({
   const addField = () => {
     const newField: Field =
       fields.length === 0
-        ? {
-            id: crypto.randomUUID(),
-            name: "id",
-            type: "INT",
-            pk: true,
-            fk: false,
-            notNull: true,
-            unique: true,
-            ai: true,
-          }
+        ? defaultPkField()
         : {
             id: crypto.randomUUID(),
             name: null,
@@ -235,6 +251,7 @@ export default function Attributes({
   };
 
   const removeField = (id: string) => {
+    if (isLastPrimaryKey(fields, id)) return;
     setFields(fields.filter((field) => field.id !== id));
   };
 
@@ -263,6 +280,7 @@ export default function Attributes({
 
   // Ao marcar PK, Not Null e Unique sao marcados automaticamente
   const handlePkChange = (id: string, checked: boolean) => {
+    if (!checked && isLastPrimaryKey(fields, id)) return;
     setFields(
       fields.map((field) =>
         field.id === id
@@ -274,6 +292,10 @@ export default function Attributes({
     );
   };
 
+  const missingPk = fields.length > 0 && !hasPrimaryKey(fields);
+  const duplicatedIds = duplicateFieldIds(fields);
+  const blocked = missingPk || duplicatedIds.size > 0;
+
   return (
     <Modal
       width={1120}
@@ -284,9 +306,14 @@ export default function Attributes({
           <Button key="ok" type="default" onClick={() => setOpen(false)}>
             Descartar alterações
           </Button>
-          <Button key="ok" type="primary" onClick={() => setOpen(false)}>
-            Salvar
-          </Button>
+          <Tooltip
+            key="save"
+            title={missingPk ? PK_REQUIRED_MESSAGE : duplicatedIds.size ? "Renomeie os atributos repetidos." : undefined}
+          >
+            <Button type="primary" disabled={blocked} onClick={() => setOpen(false)}>
+              Salvar
+            </Button>
+          </Tooltip>
         </>,
       ]}
       title={
@@ -307,6 +334,29 @@ export default function Attributes({
         size="middle"
         style={{ width: "100%", paddingRight: 24 }}
       >
+        {missingPk && (
+          <Alert
+            type="error"
+            showIcon
+            message="Esta entidade não tem chave primária."
+            description="Marque a coluna PK de pelo menos um atributo."
+            action={
+              <Button size="small" onClick={() => setFields(ensurePrimaryKey(fields).fields)}>
+                Definir chave primária
+              </Button>
+            }
+          />
+        )}
+
+        {duplicatedIds.size > 0 && (
+          <Alert
+            type="error"
+            showIcon
+            message="Há atributos com o mesmo nome nesta entidade."
+            description="Renomeie os atributos destacados em vermelho."
+          />
+        )}
+
         {onTableDescriptionChange && (
           <div>
             <Text strong>Descrição da tabela</Text>
@@ -424,6 +474,8 @@ export default function Attributes({
             <Col span={4}>
               <NameCell
                 field={field}
+                validate={(value) => fieldNameError(fields, value, field.id)}
+                duplicated={duplicatedIds.has(field.id)}
                 onCommit={(value) => updateField(field.id, "name", value)}
               />
             </Col>
@@ -484,11 +536,15 @@ export default function Attributes({
             </Col>
 
             <Col span={2} style={{ textAlign: "center" }}>
-              <Checkbox
-                className="attr-checkbox"
-                checked={field.pk}
-                onChange={(e) => handlePkChange(field.id, e.target.checked)}
-              />
+              <Tooltip title={isLastPrimaryKey(fields, field.id) ? PK_REQUIRED_MESSAGE : undefined}>
+                <Checkbox
+                  className="attr-checkbox"
+                  aria-label="Chave primária"
+                  checked={field.pk}
+                  disabled={isLastPrimaryKey(fields, field.id)}
+                  onChange={(e) => handlePkChange(field.id, e.target.checked)}
+                />
+              </Tooltip>
             </Col>
 
             <Col span={2} style={{ textAlign: "center" }}>
@@ -538,10 +594,12 @@ export default function Attributes({
                   onClick={() => toggleDescription(field)}
                 />
               </Tooltip>
-              <Tooltip title="Remover atributo">
+              <Tooltip title={isLastPrimaryKey(fields, field.id) ? PK_REQUIRED_MESSAGE : "Remover atributo"}>
                 <Button
                   type="text"
-                  style={{ color: "#B11226", border: "none" }}
+                  aria-label="Remover atributo"
+                  disabled={isLastPrimaryKey(fields, field.id)}
+                  style={{ color: isLastPrimaryKey(fields, field.id) ? undefined : "#B11226", border: "none" }}
                   icon={<CloseOutlined />}
                   onClick={() => removeField(field.id)}
                 />

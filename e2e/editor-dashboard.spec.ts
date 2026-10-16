@@ -8,7 +8,6 @@ import {
   getDiagramViaApi,
   loggedInContext,
   openDiagram,
-  renameEntity,
   shareViaApi,
   chooseMoreOption,
 } from "./support";
@@ -16,7 +15,7 @@ import {
 const SQL = `
 CREATE TABLE cliente (id INT PRIMARY KEY, nome VARCHAR(50));
 CREATE TABLE pedido (id INT PRIMARY KEY, cliente_id INT, FOREIGN KEY (cliente_id) REFERENCES cliente(id));
-CREATE TABLE registro (mensagem TEXT);
+CREATE TABLE registro (id INT PRIMARY KEY, mensagem TEXT);
 `;
 
 async function importSql(page: Page, sql: string) {
@@ -40,7 +39,7 @@ async function exportMySql(page: Page) {
   return { modal, script };
 }
 
-test("ENUM com valores, descrições e export com nomes repetidos e FK renomeada", async ({ browser }) => {
+test("ENUM com valores, descrições, nome repetido recusado e FK renomeada", async ({ browser }) => {
   const owner = await createUser("enum");
   const diagramId = await createDiagramViaApi(owner, "Loja");
   const page = await (await loggedInContext(browser, owner)).newPage();
@@ -49,7 +48,13 @@ test("ENUM com valores, descrições e export com nomes repetidos e FK renomeada
   await importSql(page, SQL);
   await expect(entityNodes(page)).toHaveCount(3);
 
-  await renameEntity(page, 2, "Cliente");
+  const registroName = entityNodes(page).nth(2).getByLabel("Nome da entidade");
+  await registroName.click();
+  await registroName.fill("Cliente");
+  await expect(page.getByRole("tooltip")).toContainText('Já existe uma entidade chamada "cliente".');
+  await registroName.press("Enter");
+  await expect(registroName).toHaveValue("registro");
+  await expect(entityNodes(page).getByLabel("Nome repetido")).toHaveCount(0);
 
   await entity(page, "cliente").getByRole("button", { name: "Configurar atributos" }).click();
   const attributes = page.locator(".ant-modal:visible").filter({ hasText: "Configurar atributos" });
@@ -86,7 +91,7 @@ test("ENUM com valores, descrições e export com nomes repetidos e FK renomeada
   await attributes.getByRole("button", { name: "Salvar", exact: true }).click();
 
   const { modal, script } = await exportMySql(page);
-  expect(script).toContain("CREATE TABLE `Cliente_2`");
+  expect(script).toContain("CREATE TABLE `registro`");
   expect(script).toContain("`situacao` ENUM('ativo', 'inativo')");
   expect(script).toContain("`nome` VARCHAR(50) COMMENT 'Nome completo'");
   expect(script).toContain(") COMMENT='Quem compra na loja';");

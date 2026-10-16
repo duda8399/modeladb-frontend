@@ -341,6 +341,8 @@ const ConstructorPage: React.FC = () => {
       relationType,
       { id: sourceId, node: store.getNode(sourceId), handle: pendingConnection.sourceHandle },
       { id: targetId, node: store.getNode(targetId), handle: pendingConnection.targetHandle },
+      undefined,
+      store.nodes,
     ).forEach(ops.sendOp);
 
     setPendingConnection(null);

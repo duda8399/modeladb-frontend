@@ -2,6 +2,8 @@ import type { CollabEdge, CollabField, CollabNode, OperationDraft } from "../sto
 import type { FkAction, TableCheck, TableIndex } from "../types/diagramER";
 import { defaultCheckName, defaultIndexName } from "./sqlExport";
 import { isValidSize } from "./sqlTypes";
+import { nameError } from "./entityNames";
+import { fieldNameError } from "./fieldNames";
 
 export type SuggestionCategory =
   | "normalizacao"
@@ -97,9 +99,8 @@ export function planSuggestion(
     case "rename_table": {
       const newName = action.newName?.trim();
       if (!newName) return { error: "A sugestão não informou o novo nome." };
-      if (nodes.some((n) => n !== table && n.type === "entityNode" && !n.data.deleted && lower(n.data.name) === lower(newName))) {
-        return { error: `Já existe uma tabela chamada ${newName}.` };
-      }
+      const conflict = nameError(nodes, newName, table.id);
+      if (conflict) return { error: conflict };
       ops.push({ type: "SET_NODE_PROP", targetId: table.id, payload: { key: "name", value: newName }, previousValue: table.data.name });
       break;
     }
@@ -107,7 +108,9 @@ export function planSuggestion(
     case "rename_column": {
       const newName = action.newName?.trim();
       if (!newName) return { error: "A sugestão não informou o novo nome." };
-      if (findField(table, newName)) return { error: `Já existe a coluna ${tableName}.${newName}.` };
+      if (fieldNameError(liveFields(table), newName, field?.id)) {
+        return { error: `Já existe a coluna ${tableName}.${newName}.` };
+      }
       ops.push(setField(table, field!, "name", newName));
       edges
         .filter(
@@ -152,7 +155,9 @@ export function planSuggestion(
     case "add_column": {
       const name = action.column?.trim();
       if (!name || !action.dataType) return { error: "A sugestão está incompleta." };
-      if (findField(table, name)) return { error: `A coluna ${tableName}.${name} já existe.` };
+      if (fieldNameError(liveFields(table), name)) {
+        return { error: `A coluna ${tableName}.${name} já existe.` };
+      }
       const size = action.size?.replace(/\s+/g, "") || null;
       if (!isValidSize(action.dataType, size)) return { error: `Tamanho ${size} inválido para ${action.dataType}.` };
       ops.push({

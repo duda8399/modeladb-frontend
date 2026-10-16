@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Button, Empty, Modal, Popconfirm, Spin, Tag, Typography } from "antd";
-import { ReactFlow, ReactFlowProvider, Background, Controls, type EdgeTypes, type NodeTypes } from "reactflow";
+import {
+  ReactFlow,
+  ReactFlowProvider,
+  Background,
+  Controls,
+  ConnectionMode,
+  type EdgeTypes,
+  type NodeTypes,
+} from "reactflow";
 import EntityNode from "./EntityNode";
 import ViewNode from "./ViewNode";
 import NoteNode from "./NoteNode";
@@ -146,6 +154,7 @@ export default function VersionPreviewModal({
                   edges={previewEdges}
                   nodeTypes={nodeTypes}
                   edgeTypes={edgeTypes}
+                  connectionMode={ConnectionMode.Loose}
                   nodesDraggable={false}
                   nodesConnectable={false}
                   elementsSelectable={false}

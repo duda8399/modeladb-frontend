@@ -1,6 +1,8 @@
 import { useCallback } from "react";
 import { useReactFlow } from "reactflow";
 import { useDiagramCollabStore, type OperationDraft } from "../../../stores/diagramCollabStore";
+import { defaultPkField } from "../../../utils/primaryKey";
+import { findNameConflict, uniqueName } from "../../../utils/entityNames";
 
 export function useNodeFactory(sendOp: (draft: OperationDraft) => void) {
   const { getNodes, screenToFlowPosition } = useReactFlow();
@@ -20,7 +22,14 @@ export function useNodeFactory(sendOp: (draft: OperationDraft) => void) {
   );
 
   const addEntityNode = useCallback(
-    () => addNode({ type: "entityNode", data: { name: "Entidade", fields: [] } }),
+    () =>
+      addNode({
+        type: "entityNode",
+        data: {
+          name: uniqueName("Entidade", useDiagramCollabStore.getState().nodes),
+          fields: [{ ...defaultPkField(), order: 0 }],
+        },
+      }),
     [addNode],
   );
 
@@ -37,10 +46,10 @@ export function useNodeFactory(sendOp: (draft: OperationDraft) => void) {
   const addNoteNode = useCallback(() => addNode({ type: "noteNode", data: { text: "" } }), [addNode]);
 
   const addViewNode = useCallback(() => {
-    const viewCount = useDiagramCollabStore
-      .getState()
-      .nodes.filter((node) => node.type === "viewNode" && !node.data.deleted).length;
-    addNode({ type: "viewNode", data: { name: `view_${viewCount + 1}`, sql: "" } });
+    const nodes = useDiagramCollabStore.getState().nodes;
+    let suffix = nodes.filter((node) => node.type === "viewNode" && !node.data.deleted).length + 1;
+    while (findNameConflict(nodes, `view_${suffix}`)) suffix += 1;
+    addNode({ type: "viewNode", data: { name: `view_${suffix}`, sql: "" } });
   }, [addNode]);
 
   return { addEntityNode, addTextNode, addSectionNode, addNoteNode, addViewNode };

@@ -99,3 +99,34 @@ test("salva, compara e restaura versões, avisando os colaboradores", async ({ b
 
   assertNoErrors();
 });
+
+test("a prévia da versão mostra os relacionamentos", async ({ browser }) => {
+  const owner = await createUser("previa");
+  const diagramId = await createDiagramViaApi(owner, "Prévia com relação");
+  const page = await (await loggedInContext(browser, owner)).newPage();
+  const assertNoErrors = failOnPageErrors(page);
+  await openDiagram(page, diagramId);
+
+  await importSql(
+    page,
+    [
+      "CREATE TABLE cliente (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY);",
+      "CREATE TABLE pedido (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, cliente_id INT NOT NULL,",
+      "FOREIGN KEY (cliente_id) REFERENCES cliente(id));",
+    ].join("\n"),
+  );
+  await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+  await waitSaved(page);
+
+  await page.getByRole("button", { name: "Histórico" }).click();
+  await expect(items(page).first()).toContainText("2 tabelas · 1 relacionamento");
+  await items(page).first().getByRole("button", { name: "Visualizar" }).click();
+  const canvas = page
+    .locator(".ant-modal")
+    .filter({ hasText: "Mudanças feitas desde esta versão" })
+    .getByTestId("version-preview-canvas");
+  await expect(canvas.locator(".react-flow__node-entityNode")).toHaveCount(2);
+  await expect(canvas.locator(".react-flow__edge")).toHaveCount(1);
+
+  assertNoErrors();
+});

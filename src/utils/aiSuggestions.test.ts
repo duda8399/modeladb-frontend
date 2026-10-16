@@ -107,6 +107,9 @@ describe("planSuggestion aplicado no store colaborativo", () => {
     expect(plan(action({ column: "total", dataType: "FLOAT" }))).toBe("O diagrama já está assim.");
     expect(plan(action({ type: "rename_table", newName: "CLIENTE" }))).toContain("Já existe");
     expect(plan(action({ type: "add_column", column: "total", dataType: "INT" }))).toContain("já existe");
+    expect(plan(action({ type: "add_column", column: " Total ", dataType: "INT" }))).toContain("já existe");
+    expect(plan(action({ type: "rename_column", column: "total", newName: "CLIENTE ID" }))).toContain("Já existe");
+    expect(plan(action({ type: "rename_column", column: "total", newName: "Total" }))).toBe("ok");
     expect(plan(action({ type: "set_fk_action", column: "total", onDelete: "CASCADE" }))).toContain("Não há relacionamento");
     expect(plan(action({ type: "set_default", table: "cliente", column: "id", defaultValue: "1" }))).toContain("auto incremento");
 

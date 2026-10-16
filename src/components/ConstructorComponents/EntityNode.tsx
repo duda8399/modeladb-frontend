@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from "react";
-import { Card, Row, Col, Button, Input } from "antd";
-import { CheckCircleOutlined, CloseOutlined, KeyOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { Card, Row, Col, Button, Input, Tooltip } from "antd";
+import { CheckCircleOutlined, CloseOutlined, KeyOutlined, ThunderboltOutlined, WarningFilled } from "@ant-design/icons";
 import AttributesModal from "./AttributesModal";
 import TableConstraintsModal from "./TableConstraintsModal";
 import { formatTypeLabel } from "../../utils/sqlTypes";
@@ -8,6 +8,8 @@ import DeleteModal from "./DeleteModal";
 import { Handle, Position } from "reactflow";
 import type { Field, TableCheck, TableIndex } from "../../types/diagramER";
 import { FkIcon } from "./FieldIcons";
+import { hasPrimaryKey } from "../../utils/primaryKey";
+import { duplicateFieldIds } from "../../utils/fieldNames";
 
 interface Props {
   id: string;
@@ -18,8 +20,10 @@ interface Props {
     checks?: TableCheck[];
     description?: string | null;
   };
+  duplicateName?: boolean;
+  validateName?: (value: string) => string | null;
   onDelete?: () => void;
-  onRename?: (value: string) => void;
+  onRename?: (value: string) => boolean | void;
   onFieldsChange?: (fields: Field[]) => void;
   onIndexesChange?: (indexes: TableIndex[]) => void;
   onChecksChange?: (checks: TableCheck[]) => void;
@@ -28,6 +32,8 @@ interface Props {
 
 export default memo(function EntityNode({
   data,
+  duplicateName,
+  validateName,
   onDelete,
   onRename,
   onFieldsChange,
@@ -51,6 +57,7 @@ export default memo(function EntityNode({
   const [openDelete, setOpenDelete] = useState(false);
   const [entityName, setEntityName] = useState(data.name || "Entidade");
   const [isEditingName, setIsEditingName] = useState(false);
+  const nameProblem = isEditingName ? validateName?.(entityName) ?? null : null;
 
   useEffect(() => {
     if (!isEditingName) {
@@ -118,7 +125,13 @@ export default memo(function EntityNode({
             }}
             title={data.description || undefined}
           >
+            <Tooltip
+              open={isEditingName && !!nameProblem ? true : undefined}
+              title={isEditingName ? nameProblem : undefined}
+            >
             <Input
+              aria-label="Nome da entidade"
+              status={isEditingName && nameProblem ? "error" : undefined}
               value={entityName}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                 setEntityName(e.target.value)
@@ -126,7 +139,14 @@ export default memo(function EntityNode({
               onFocus={() => setIsEditingName(true)}
               onBlur={() => {
                 setIsEditingName(false);
-                onRename?.(entityName);
+                const next = entityName.trim();
+                if (next === (data.name || "Entidade")) {
+                  setEntityName(next);
+                  return;
+                }
+                if (validateName?.(next) || onRename?.(next) === false) {
+                  setEntityName(data.name || "Entidade");
+                }
               }}
               onPressEnter={(e) => (e.target as HTMLInputElement).blur()}
               size="small"
@@ -140,6 +160,25 @@ export default memo(function EntityNode({
                 textAlign: "center",
               }}
             />
+            </Tooltip>
+
+            {duplicateName && (
+              <Tooltip title="Outro item do diagrama tem este mesmo nome. Renomeie um deles.">
+                <WarningFilled aria-label="Nome repetido" style={{ color: "#ff7875" }} />
+              </Tooltip>
+            )}
+
+            {duplicateFieldIds(fields).size > 0 && (
+              <Tooltip title="Há atributos com o mesmo nome. Corrija em Configurar atributos.">
+                <WarningFilled aria-label="Atributos repetidos" style={{ color: "#ffa39e" }} />
+              </Tooltip>
+            )}
+
+            {!hasPrimaryKey(fields) && (
+              <Tooltip title="Sem chave primária. Defina uma em Configurar atributos.">
+                <WarningFilled aria-label="Sem chave primária" style={{ color: "#ffd666" }} />
+              </Tooltip>
+            )}
 
             <CloseOutlined
               style={{ cursor: "pointer", color: "#FFFFFF" }}

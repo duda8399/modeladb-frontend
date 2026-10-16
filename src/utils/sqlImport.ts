@@ -3,6 +3,9 @@ import { Cursor, splitTopLevel, tokenize, type Token } from "./sqlTokenizer";
 import { defaultCheckName, defaultIndexName } from "./sqlExport";
 import { isSizedType, isValidSize, isValueListType, normalizeValues } from "./sqlTypes";
 import { analyzeViewSql } from "./viewSql";
+import { ensurePrimaryKey, pkFixMessage } from "./primaryKey";
+import { dedupeNodeNames, renameMessage } from "./entityNames";
+import { dedupeFieldNames, fieldRenameMessage } from "./fieldNames";
 
 export class SqlImportError extends Error {}
 
@@ -896,7 +899,7 @@ export function parseSqlToDiagram(sql: string): SqlImportResult {
     const id = newId();
     nodeIdByTable.set(table.name.toLowerCase(), id);
 
-    const fields: (Field & { order: number })[] = table.columns.map((column, index) => ({
+    const parsedFields: (Field & { order: number })[] = table.columns.map((column, index) => ({
       id: newId(),
       name: column.name,
       type: column.type,
@@ -911,6 +914,12 @@ export function parseSqlToDiagram(sql: string): SqlImportResult {
       ...(column.description ? { description: column.description } : {}),
       order: index,
     }));
+
+    const deduped = dedupeFieldNames(parsedFields);
+    warnings.push(...deduped.renamed.map((change) => fieldRenameMessage(table.name, change)));
+    const { fields, fix } = ensurePrimaryKey(deduped.fields, newId);
+    const fixMessage = pkFixMessage(table.name, fix);
+    if (fixMessage) warnings.push(fixMessage);
 
     if (fields.some((f) => !f.type)) {
       warnings.push(`A tabela "${table.name}" tem colunas sem tipo; defina o tipo no editor.`);
@@ -1040,8 +1049,11 @@ export function parseSqlToDiagram(sql: string): SqlImportResult {
     relationCount++;
   }
 
+  const named = dedupeNodeNames([...nodes, ...viewNodes]);
+  warnings.push(...named.renamed.map(renameMessage));
+
   return {
-    nodes: [...nodes, ...viewNodes],
+    nodes: named.nodes,
     edges,
     warnings,
     tableCount: nodes.length,
