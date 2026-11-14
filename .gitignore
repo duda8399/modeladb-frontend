@@ -27,3 +27,5 @@ dist-ssr
 coverage
 test-results
 reports/playwright
+
+.env
