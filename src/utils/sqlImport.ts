@@ -584,6 +584,15 @@ class SchemaBuilder {
         cur.acceptWords("IDENTITY")
       ) {
         column.ai = true;
+      } else if (cur.acceptWords("GENERATED")) {
+        if (!cur.acceptWords("ALWAYS")) cur.acceptWords("BY", "DEFAULT");
+        cur.acceptWords("AS");
+        if (cur.acceptWords("IDENTITY")) {
+          column.ai = true;
+          if (cur.isPunct("(")) cur.skipGroup();
+        } else if (cur.isPunct("(")) {
+          cur.skipGroup();
+        }
       } else if (cur.acceptWords("DEFAULT")) {
         const parsed = this.readDefault(cur);
         if (parsed.ai) column.ai = true;
