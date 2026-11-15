@@ -17,7 +17,7 @@
 | `npm run test:cov` | O mesmo, com cobertura em `coverage/` | ~6 s |
 | `npm run test:sql-engines` | SQL exportado executado em MySQL 8.4 e PostgreSQL 16 reais | ~4 min |
 | `npm run test:e2e` | Ponta a ponta com Playwright em dois navegadores | ~1 min |
-| `npm run test:e2e:perf` | Latência percebida de uma edição entre dois navegadores | ~20 s |
+| `npm run test:e2e:perf` | Latência percebida entre dois navegadores: 4 tipos de operação, 3 execuções × 125 ciclos (1500 amostras), ajustável por `UI_LATENCY_SAMPLES`, `UI_LATENCY_RUNS` e `UI_LATENCY_WARMUP` | ~10 min |
 | `npm run bench` | Operações por segundo do store e custo da exportação SQL | ~15 s |
 | `npm run typecheck:test` | Checagem de tipos dos arquivos de teste | ~5 s |
 
@@ -54,7 +54,7 @@ FC_NUM_RUNS=20000 npx vitest run src/stores/diagramCollabStore.convergence.test.
 | `e2e/logical-model.spec.ts` | Tamanho/precisão, DEFAULT, CHECK, ON DELETE/ON UPDATE e participação: importação, edição, sincronização com um segundo usuário e exportação |
 | `e2e/version-history.spec.ts` | Histórico: versão automática e manual, pré-visualização com mudanças, restauração avisando outro colaborador, persistência e leitor sem ações |
 | `e2e/ai-analysis.spec.ts` | Análise da IA (resposta simulada): painel, aplicar sugestões sincronizando com outro usuário, ignorar, desfazer, pedido de chave |
-| `e2e/perf.spec.ts` | Gera `reports/perf/ui-latency.{md,json}` |
+| `e2e/perf.spec.ts` | Gera `reports/perf/ui-latency.{md,json}` e `ui-latency-amostras.csv` |
 
 ## Falhas conhecidas documentadas
 

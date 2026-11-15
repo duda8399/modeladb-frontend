@@ -51,7 +51,7 @@ MongoDB em memória, e as respostas da OpenAI são simuladas.
 | Testes unitários e de propriedades (convergência em 300 sessões aleatórias) | `npm test` | terminal |
 | Testes ponta a ponta com dois navegadores | `npm run test:e2e` | terminal / relatório do Playwright |
 | Compatibilidade do SQL exportado em MySQL 8.4 e PostgreSQL 16 | `npm run test:sql-engines` | `reports/sql-compatibility.md` |
-| Latência percebida de uma edição entre dois navegadores | `npm run test:e2e:perf` | `reports/perf/ui-latency.{md,json}` |
+| Latência percebida entre dois navegadores (renomear, mover, criar e remover entidade) | `npm run test:e2e:perf` | `reports/perf/ui-latency.{md,json}` e `ui-latency-amostras.csv` |
 | Desempenho do store e da exportação SQL | `npm run bench` | `reports/perf/store-bench.json` |
 
 O teste de compatibilidade cria e remove sozinho os contêineres `mysql:8.4` e
