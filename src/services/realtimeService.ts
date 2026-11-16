@@ -192,6 +192,7 @@ class RealtimeService {
 
     this.cursor = { epoch: event.epoch, seq: event.seq };
     this.resyncing = true;
+    const catchUp = event.ops ?? [];
     this.setStatus("reconnecting");
 
     let reload: Promise<void> | void;
@@ -206,6 +207,7 @@ class RealtimeService {
       .catch(() => undefined)
       .finally(() => {
         this.resyncing = false;
+        catchUp.forEach((operation) => this.params?.onOperation(operation));
         this.buffered.splice(0).forEach(([operation, meta]) => this.receive(operation, meta));
         this.finishJoin();
       });

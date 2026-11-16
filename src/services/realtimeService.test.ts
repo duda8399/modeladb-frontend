@@ -250,6 +250,27 @@ describe("realtimeService", () => {
     expect(socket.emitted.filter(([e]) => e === "operation").map(([, p]) => p)).toEqual([op(10)]);
   });
 
+  it("depois da recarga aplica as operações da época nova antes das que chegaram durante ela", async () => {
+    const service = await loadService();
+    const h = handlers();
+    let finishReload: () => void = () => {};
+    const onResyncNeeded = vi.fn(() => new Promise<void>((resolve) => (finishReload = resolve)));
+    service.connect({ diagramId: "d1", getToken: () => "t", ...h, onResyncNeeded });
+    const socket = sockets[0];
+    joined(socket, 2);
+    socket.fire("disconnect", "transport close");
+    socket.fire("connect");
+
+    socket.fire("sync", { epoch: "e2", seq: 2, ops: [op(1), op(2)], complete: false, initial: false });
+    socket.fire("operation", op(3), { epoch: "e2", seq: 3 });
+    expect(h.onOperation).not.toHaveBeenCalled();
+
+    finishReload();
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(h.onOperation.mock.calls.map(([o]) => o.opId)).toEqual(["1", "2", "3"]);
+  });
+
   it("usa a confirmação do servidor para avançar a posição", async () => {
     const service = await loadService();
     service.connect({ diagramId: "d1", getToken: () => "t", ...handlers() });

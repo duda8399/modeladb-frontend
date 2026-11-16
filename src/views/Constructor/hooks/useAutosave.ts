@@ -16,6 +16,7 @@ type Params = {
   edges: CustomEdge[];
   loaded: boolean;
   readOnly: boolean;
+  paused?: boolean;
   messageApi: MessageInstance;
   captureThumbnail: () => Promise<Blob | undefined>;
   onSaveStart?: () => number;
@@ -56,6 +57,7 @@ export function useAutosave({
   edges,
   loaded,
   readOnly,
+  paused = false,
   messageApi,
   captureThumbnail,
   onSaveStart,
@@ -73,6 +75,7 @@ export function useAutosave({
   const saveSignatureRef = useRef(saveSignature);
   const savedSignatureRef = useRef(savedSignature);
   const readOnlyRef = useRef(readOnly);
+  const pausedRef = useRef(paused);
   const saveInFlightRef = useRef<Promise<void> | null>(null);
   const lastThumbnailAtRef = useRef(0);
   const callbacksRef = useRef({ captureThumbnail, onSaveStart, onSaveSuccess });
@@ -82,6 +85,7 @@ export function useAutosave({
     saveSignatureRef.current = saveSignature;
     savedSignatureRef.current = savedSignature;
     readOnlyRef.current = readOnly;
+    pausedRef.current = paused;
     callbacksRef.current = { captureThumbnail, onSaveStart, onSaveSuccess };
   });
 
@@ -92,6 +96,8 @@ export function useAutosave({
 
   const resetBaseline = useCallback(() => setSavedSignature(null), []);
 
+  const markUnsaved = useCallback(() => setSavedSignature(""), []);
+
   useEffect(() => {
     setSavedSignature(null);
     setSaveStatus("idle");
@@ -100,6 +106,7 @@ export function useAutosave({
   const persistDiagram = useCallback(
     async ({ manual }: { manual: boolean }) => {
       if (!diagramId) return;
+      if (!manual && pausedRef.current) return;
 
       if (saveInFlightRef.current) {
         if (!manual) return;
@@ -169,10 +176,11 @@ export function useAutosave({
     if (!isDirty || readOnly) return;
 
     setSaveStatus((prev) => (prev === "saving" ? prev : "pending"));
+    if (paused) return;
 
     const timer = setTimeout(() => persistDiagram({ manual: false }), AUTOSAVE_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [isDirty, readOnly, saveSignature, persistDiagram]);
+  }, [isDirty, readOnly, paused, saveSignature, persistDiagram]);
 
   useEffect(() => {
     if (!isDirty || readOnly) return;
@@ -206,5 +214,6 @@ export function useAutosave({
     handleSave,
     flushPendingSave,
     resetBaseline,
+    markUnsaved,
   };
 }

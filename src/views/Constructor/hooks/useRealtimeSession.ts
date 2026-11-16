@@ -22,6 +22,7 @@ type Handlers = {
   onDocumentRenamed?: (event: DocumentRenamedEvent) => void;
   onAccessRevoked: (event: AccessRevokedEvent) => void;
   onError: (error: RealtimeError) => void;
+  onStatusChange?: (status: ConnectionStatus) => void;
 };
 
 type Params = Handlers & {
@@ -68,6 +69,7 @@ export function useRealtimeSession({ diagramId, userId, enabled, ...handlers }: 
   }, []);
 
   const reset = useCallback(() => {
+    handlersRef.current.onStatusChange?.("offline");
     setOnlineUsers({});
     setCursors({});
     setPendingCount(0);
@@ -98,6 +100,7 @@ export function useRealtimeSession({ diagramId, userId, enabled, ...handlers }: 
       onStatusChange: (next, pending) => {
         setStatus(next);
         setPendingCount(pending);
+        handlersRef.current.onStatusChange?.(next);
       },
     });
 

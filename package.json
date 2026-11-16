@@ -16,7 +16,8 @@
     "test:e2e": "playwright test --project chrome",
     "test:e2e:ui": "playwright test --project chrome --ui",
     "bench": "vitest bench --run --outputJson reports/perf/store-bench.json",
-    "test:e2e:perf": "playwright test --project perf"
+    "test:e2e:perf": "playwright test --project perf",
+    "experiment:reconnection": "vitest run --config vitest.experiment.config.ts"
   },
   "dependencies": {
     "@ant-design/icons": "^5.6.1",

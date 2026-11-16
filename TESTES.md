@@ -18,6 +18,7 @@
 | `npm run test:sql-engines` | SQL exportado executado em MySQL 8.4 e PostgreSQL 16 reais | ~4 min |
 | `npm run test:e2e` | Ponta a ponta com Playwright em dois navegadores | ~1 min |
 | `npm run test:e2e:perf` | Latência percebida entre dois navegadores: 4 tipos de operação, 3 execuções × 125 ciclos (1500 amostras), ajustável por `UI_LATENCY_SAMPLES`, `UI_LATENCY_RUNS` e `UI_LATENCY_WARMUP` | ~10 min |
+| `npm run experiment:reconnection` | Desconexão do cliente (1, 5, 15 e 30 s), intensidade de edições concorrentes (1, 5 e 20 op/s) e reinício do servidor, com e sem o mecanismo de reconexão, 10 repetições; resultados em `reports/perf/reconnection.*`. Ajustável por `RECONN_REPEATS`, `RECONN_SCENARIOS`, `RECONN_DURATIONS_MS`, `RECONN_RATES`, `RECONN_RESTART_EXTRA_MS` | ~1 h |
 | `npm run bench` | Operações por segundo do store e custo da exportação SQL | ~15 s |
 | `npm run typecheck:test` | Checagem de tipos dos arquivos de teste | ~5 s |
 

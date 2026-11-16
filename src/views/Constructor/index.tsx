@@ -96,6 +96,7 @@ const ConstructorPage: React.FC = () => {
   const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(() => new Set());
   const ownRestoreRef = useRef<string | null>(null);
   const unsavedOwnOpsRef = useRef<Operation[]>([]);
+  const [reconnecting, setReconnecting] = useState(false);
   const reactFlowContainerRef = useRef<HTMLDivElement>(null);
   const dragStartPositionsRef = useRef<Record<string, { x: number; y: number }>>({});
 
@@ -166,6 +167,7 @@ const ConstructorPage: React.FC = () => {
     edges,
     loaded,
     readOnly: isViewer,
+    paused: reconnecting,
     messageApi,
     captureThumbnail,
     onSaveStart: () => unsavedOwnOpsRef.current.length,
@@ -174,7 +176,7 @@ const ConstructorPage: React.FC = () => {
     },
   });
 
-  const { resetBaseline } = autosave;
+  const { resetBaseline, markUnsaved } = autosave;
 
   const applyServerDiagram = useCallback(
     (data: ServerDiagram) => {
@@ -232,12 +234,13 @@ const ConstructorPage: React.FC = () => {
       replay.forEach((op) => store.applyOperation(op, false));
       ops.syncFromStore();
       replay.filter((op) => !queued.has(op.opId)).forEach((op) => realtimeService.sendOperation(op));
+      if (replay.length) markUnsaved();
 
       messageApi.info("Conexão restabelecida. O diagrama foi atualizado com as alterações dos colaboradores.");
     } catch {
       messageApi.warning("Conexão restabelecida, mas não foi possível atualizar o diagrama. Recarregue a página.");
     }
-  }, [id, applyServerDiagram, ops, messageApi]);
+  }, [id, applyServerDiagram, ops, messageApi, markUnsaved]);
 
   const handleDocumentRestored = useCallback(
     async (event: DocumentRestoredEvent) => {
@@ -266,6 +269,7 @@ const ConstructorPage: React.FC = () => {
     enabled: loaded,
     onRemoteOperation: ops.applyRemoteOperation,
     onResyncNeeded: resyncFromServer,
+    onStatusChange: (status) => setReconnecting(status === "reconnecting"),
     onDocumentRestored: handleDocumentRestored,
     onError: (error) => messageApi.error(error.message),
     onDocumentRenamed: (event) => {
